@@ -1,0 +1,33 @@
+# Render Blueprint: render.com -> New -> Blueprint -> pick this repository.
+databases:
+  - name: ishxona-db
+    plan: basic-256mb
+    databaseName: ishxona
+    user: ishxona
+
+services:
+  - type: web
+    name: ishxona
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: ./start.sh
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ishxona-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_USERNAME
+        value: boshliq
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DAY_CLOSE_HOUR
+        value: "21"
+      - key: REMINDER_HOUR
+        value: "18"
