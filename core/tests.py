@@ -239,3 +239,19 @@ class SeedDemoTests(TestCase):
         call_command("seed_demo", days=61, reset=True, stdout=open(os.devnull, "w"))
         self.assertEqual(PriceHistory.objects.count(), 2)
         self.assertEqual(Employee.objects.filter(role=Employee.Role.BOSS).count(), 1)
+
+
+class DemoRoleTests(TestCase):
+    def test_moves_telegram_between_roles(self):
+        from django.core.management import call_command
+
+        out = open(os.devnull, "w")
+        call_command("seed_demo", days=3, stdout=out)
+        services.register_by_contact(555, "+998 90 111 22 33", "Men")
+        call_command("demo_rol", "sardor", stdout=out)
+        self.assertEqual(services.get_by_telegram(555).role, Employee.Role.MANAGER)
+        call_command("demo_rol", "ishchi", stdout=out)
+        self.assertEqual(services.get_by_telegram(555).role, Employee.Role.WORKER)
+        call_command("demo_rol", "boshliq", stdout=out)
+        self.assertEqual(Employee.objects.filter(telegram_id=555).count(), 1)
+        self.assertTrue(services.get_by_telegram(555).is_boss)

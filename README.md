@@ -42,6 +42,8 @@ python manage.py test           # testlar
 
 `python manage.py seed_demo` oxirgi ikki oy uchun demo yaratadi: ishchi turlari, 3 guruh va sardorlari, 23 ishchi, 4 mahsulot va qismlari, kunlik ish yozuvlari (tasdiqlangan, kutilayotgan, rad etilgan), brak, tahrirlar va narx o'zgarishlari. Demo xodimlarning telefoni `99800` bilan boshlanadi va ularda Telegram ID yo'q, shuning uchun bot ularga hech narsa yubormaydi. Qaytadan yaratish: `python manage.py seed_demo --reset`.
 
+Botni turli rollarda sinash: botga `/start` yuborib, telefon raqamingizni jo'nating, keyin `python manage.py demo_rol sardor` (yoki `ishchi`, `boshliq`) ni ishga tushiring. Telegram hisobingiz o'sha roldagi demo xodimga o'tadi. Muayyan xodimni tanlash: `--kim Gulnora`.
+
 ## Tuzilma
 
 - `core/models.py`: xodimlar, guruhlar, mahsulotlar, qismlar, ish yozuvlari, tahrirlar jurnali.
