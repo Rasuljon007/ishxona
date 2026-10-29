@@ -84,3 +84,14 @@ DAY_CLOSE_HOUR = int(os.environ.get("DAY_CLOSE_HOUR", "21"))
 # Hour when workers who have not entered anything get a reminder.
 REMINDER_HOUR = int(os.environ.get("REMINDER_HOUR", "18"))
 MAX_QUANTITY = int(os.environ.get("MAX_QUANTITY", "5000"))
+
+# Print errors (with tracebacks) to the console so they show up in the host's logs.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}
