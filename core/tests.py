@@ -43,6 +43,21 @@ class ServiceTests(TestCase):
         self.assertEqual(self.ali.phone, "998904444444")
         self.assertEqual(services.normalize_phone("+998 (90) 444-44-44"), "998904444444")
 
+    def test_admin_form_rejects_same_phone_in_another_format(self):
+        from django.forms import modelform_factory
+
+        form_class = modelform_factory(Employee, fields=["full_name", "phone", "role", "script", "is_active"])
+        data = {"full_name": "Takror", "phone": "90 444 44 44", "role": "worker", "script": "latin", "is_active": True}
+        form = form_class(data=data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("phone", form.errors)
+        form = form_class(data={**data, "phone": "12345"})
+        self.assertFalse(form.is_valid())
+        self.assertIn("phone", form.errors)
+        form = form_class(data={**data, "phone": "+998 (90) 777-77-77"})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().phone, "998907777777")
+
     def test_product_price_is_sum_of_operations(self):
         self.assertEqual(self.shorts.sewing_price, 800)
 
