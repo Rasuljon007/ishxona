@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Sum
 
@@ -56,6 +57,15 @@ class Employee(models.Model):
 
     def __str__(self):
         return self.full_name
+
+    def clean(self):
+        # Normalize before the uniqueness check, so "90 123 45 67" and
+        # "+998901234567" are recognised as the same number.
+        from core.services import normalize_phone
+
+        self.phone = normalize_phone(self.phone)
+        if not (len(self.phone) == 12 and self.phone.startswith("998")):
+            raise ValidationError({"phone": "Telefon raqam 998901234567 ko'rinishida bo'lishi kerak."})
 
     def save(self, *args, **kwargs):
         from core.services import normalize_phone
