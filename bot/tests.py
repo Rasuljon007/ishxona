@@ -25,6 +25,15 @@ class BotTests(SimpleTestCase):
     def test_values_are_escaped(self):
         self.assertEqual(texts.t("welcome", name="<x>"), "Xush kelibsiz, &lt;x&gt;! Kerakli bo'limni tanlang.")
 
+    def test_boss_menu_has_manager_buttons(self):
+        from bot.keyboards import main_menu
+        from core.models import Employee
+
+        boss = Employee(full_name="B", phone="998900000000", role=Employee.Role.BOSS)
+        labels = {b.text for row in main_menu(boss).keyboard for b in row}
+        for key in ("btn_pending", "btn_enter_for", "btn_edit", "btn_team_today", "btn_rep_month"):
+            self.assertIn(texts.t(key), labels)
+
     def test_parse_range(self):
         self.assertEqual(parse_range("01.10.2026 28.10.2026"), (dt.date(2026, 10, 1), dt.date(2026, 10, 28)))
         self.assertEqual(parse_range("28.10.2026 - 01.10.2026"), (dt.date(2026, 10, 1), dt.date(2026, 10, 28)))
