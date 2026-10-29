@@ -1,5 +1,7 @@
+from django import forms
 from django.contrib import admin
 
+from core import services
 from core.models import (
     Employee,
     EntryEdit,
@@ -28,13 +30,50 @@ class TeamAdmin(admin.ModelAdmin):
         return obj.members.filter(is_active=True).count()
 
 
+class EmployeeForm(forms.ModelForm):
+    site_password = forms.CharField(
+        label="sayt paroli",
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text="Faqat boshqaruvchi uchun. Sardor /sardor/ sahifasiga telefon raqami va shu parol bilan "
+        "kiradi va faqat o'z guruhini ko'radi. Bo'sh qoldirsangiz, parol o'zgarmaydi.",
+    )
+
+    class Meta:
+        model = Employee
+        exclude = ["user"]
+
+    def clean(self):
+        data = super().clean()
+        if data.get("site_password"):
+            if data.get("role") != Employee.Role.MANAGER:
+                self.add_error("site_password", "Sayt hisobi faqat boshqaruvchilar uchun.")
+            elif len(data["site_password"]) < 6:
+                self.add_error("site_password", "Parol kamida 6 belgi bo'lishi kerak.")
+        return data
+
+
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ["full_name", "phone", "role", "worker_type", "team", "is_active", "has_telegram"]
+    form = EmployeeForm
+    list_display = ["full_name", "phone", "role", "worker_type", "team", "is_active", "has_telegram", "has_site"]
     list_filter = ["is_active", "role", "worker_type", "team"]
     list_editable = ["is_active"]
     search_fields = ["full_name", "phone"]
     readonly_fields = ["telegram_id", "created_at"]
+
+    @admin.display(boolean=True, description="sayt")
+    def has_site(self, obj):
+        return obj.user_id is not None
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        password = form.cleaned_data.get("site_password")
+        if password:
+            try:
+                services.set_site_password(obj, password)
+            except services.ServiceError as err:
+                self.message_user(request, str(err), level="error")
 
     @admin.display(boolean=True, description="Telegram")
     def has_telegram(self, obj):

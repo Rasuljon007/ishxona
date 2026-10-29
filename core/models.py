@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.db.models import Sum
 
@@ -46,6 +47,14 @@ class Employee(models.Model):
     )
     is_active = models.BooleanField(
         "faol", default=True, help_text="Bot orqali o'zi ro'yxatdan o'tganlar boshliq faollashtirguncha nofaol turadi"
+    )
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        verbose_name="sayt hisobi",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="employee",
     )
     created_at = models.DateTimeField("qo'shilgan", auto_now_add=True)
 

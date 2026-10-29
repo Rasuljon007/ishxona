@@ -4,6 +4,7 @@ Tikuv ishxonasi uchun donabay ish haqi tizimi: Telegram bot va boshqaruv paneli 
 
 - **Ishchi** botda qilgan ishini tanlab, sonini kiritadi va tasdiqlaydi. Bugungi ishlarini, shu oydagi oyligini va oylar tarixini ko'radi.
 - **Boshqaruvchi (sardor)** o'z guruhidagi yozuvlarni tasdiqlaydi yoki rad etadi, ishchi nomidan ish kiritadi, brak kiritadi va kun yopilguncha (21:00) yozuvlarni izoh bilan tahrirlaydi.
+- **Sardorlar sayti** (`/sardor/`): sardor telefon raqami va parol bilan kiradi, faqat o'z guruhini ko'radi, yozuvlarni tasdiqlaydi, rad etadi (sabab bilan) va kun yopilguncha izoh bilan tahrirlaydi. Ishchiga botda xabar boradi. Parolni boshliq panelda xodim sahifasidagi "sayt paroli" maydonida beradi.
 - **Boshliq** botda istalgan davr bo'yicha hisobot va PDF oladi. Mahsulot, qism, narx, guruh va xodimlarni boshqaruv panelida (`/admin/`) boshqaradi.
 - Har kuni soat 21:00 da har bir guruhning Telegram guruhiga PDF yuboriladi (faqat dona soni, summalarsiz). Boshliqqa esa tahrirlar hisoboti va summalar bilan umumiy PDF boradi. Soat 18:00 da ishini kiritmagan ishchilarga eslatma boradi.
 - Bot o'zbek tilida ishlaydi, lotin va kirill yozuvini tanlash mumkin.

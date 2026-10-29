@@ -1,0 +1,10 @@
+{% extends "core/base.html" %}
+{% block body %}
+<main style="max-width:420px; padding-top:60px">
+  <section>
+    <h2>Kirish taqiqlangan</h2>
+    <p>Bu sahifa faqat faol sardorlar uchun. Boshliqqa murojaat qiling.</p>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Chiqish</button></form>
+  </section>
+</main>
+{% endblock %}

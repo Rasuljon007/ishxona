@@ -255,3 +255,58 @@ class DemoRoleTests(TestCase):
         call_command("demo_rol", "boshliq", stdout=out)
         self.assertEqual(Employee.objects.filter(telegram_id=555).count(), 1)
         self.assertTrue(services.get_by_telegram(555).is_boss)
+
+
+@override_settings(BOT_TOKEN="")
+class ManagerSiteTests(TestCase):
+    def setUp(self):
+        sewer = WorkerType.objects.create(name="Tikuvchi")
+        product = Product.objects.create(name="Futbolka")
+        self.op = Operation.objects.create(product=product, worker_type=sewer, name="Yoqa", price=500)
+        self.manager = Employee.objects.create(full_name="Sardor", phone="998900000001", role=Employee.Role.MANAGER)
+        other = Employee.objects.create(full_name="Boshqa", phone="998900000002", role=Employee.Role.MANAGER)
+        team = Team.objects.create(name="T1", manager=self.manager)
+        team2 = Team.objects.create(name="T2", manager=other)
+        self.mine = Employee.objects.create(full_name="Mening ishchim", phone="998900000003", worker_type=sewer, team=team)
+        self.theirs = Employee.objects.create(full_name="Begona ishchi", phone="998900000004", worker_type=sewer, team=team2)
+        day = services.today()
+        self.e1 = WorkEntry.objects.create(date=day, worker=self.mine, operation=self.op, quantity=10, unit_price=500, entered_by=self.mine)
+        self.e2 = WorkEntry.objects.create(date=day, worker=self.theirs, operation=self.op, quantity=20, unit_price=500, entered_by=self.theirs)
+        services.set_site_password(self.manager, "parol123")
+        self.client.login(username="998900000001", password="parol123")
+
+    def test_sees_only_own_team(self):
+        page = self.client.get("/sardor/").content.decode()
+        self.assertIn("Mening ishchim", page)
+        self.assertNotIn("Begona ishchi", page)
+
+    def test_approve_and_reject(self):
+        self.client.post("/sardor/tasdiqlash/", {"entry": self.e1.pk})
+        self.e1.refresh_from_db()
+        self.assertEqual(self.e1.status, WorkEntry.Status.APPROVED)
+        self.assertEqual(self.e1.approved_by, self.manager)
+        self.client.post("/sardor/rad-etish/", {"entry": self.e2.pk, "reason": "Noto'g'ri"})
+        self.e2.refresh_from_db()
+        self.assertEqual(self.e2.status, WorkEntry.Status.PENDING)
+
+    def test_reject_needs_reason(self):
+        self.client.post("/sardor/rad-etish/", {"entry": self.e1.pk, "reason": ""})
+        self.e1.refresh_from_db()
+        self.assertEqual(self.e1.status, WorkEntry.Status.PENDING)
+        self.client.post("/sardor/rad-etish/", {"entry": self.e1.pk, "reason": "Ikki marta kiritilgan"})
+        self.e1.refresh_from_db()
+        self.assertEqual(self.e1.status, WorkEntry.Status.REJECTED)
+
+    def test_approve_all_only_own(self):
+        self.client.post("/sardor/hammasini-tasdiqlash/")
+        self.e1.refresh_from_db()
+        self.e2.refresh_from_db()
+        self.assertEqual(self.e1.status, WorkEntry.Status.APPROVED)
+        self.assertEqual(self.e2.status, WorkEntry.Status.PENDING)
+
+    def test_manager_cannot_open_admin_and_worker_cannot_log_in(self):
+        self.assertNotEqual(self.client.get("/admin/").status_code, 200)
+        self.client.logout()
+        self.assertRedirects(self.client.get("/sardor/"), "/sardor/kirish/", fetch_redirect_response=False)
+        with self.assertRaises(ServiceError):
+            services.set_site_password(self.mine, "parol123")

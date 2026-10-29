@@ -1,6 +1,8 @@
 import random
+import secrets
 from datetime import datetime, time, timedelta
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -15,7 +17,7 @@ from core.models import (
     WorkEntry,
     WorkerType,
 )
-from core.services import today
+from core.services import set_site_password, today
 
 # Demo employees get phones with this prefix, so they are easy to find and remove.
 DEMO_PHONE_PREFIX = "99800"
@@ -127,6 +129,7 @@ class Command(BaseCommand):
     def remove_demo(self):
         with transaction.atomic():
             demo = Employee.objects.filter(phone__startswith=DEMO_PHONE_PREFIX)
+            get_user_model().objects.filter(employee__in=demo).delete()
             WorkEntry.objects.filter(worker__in=demo).delete()
             Team.objects.filter(name__in=[t[0] for t in TEAMS]).delete()
             demo.delete()
@@ -140,6 +143,7 @@ class Command(BaseCommand):
     def create(self, days):
         rng = self.rng
         self.phone_counter = 0
+        self.logins = []
         end = today()
         start = end - timedelta(days=days - 1)
         tz = timezone.get_current_timezone()
@@ -172,6 +176,9 @@ class Command(BaseCommand):
             manager.team = team
             manager.save()
             teams.append(team)
+            password = secrets.token_urlsafe(6)
+            set_site_password(manager, password)
+            self.logins.append((manager, team, password))
             for wt in worker_types:
                 first, last = names.pop()
                 workers.append(
@@ -311,3 +318,6 @@ class Command(BaseCommand):
                 f"{len(workers)} ishchi, {len(entries)} ish yozuvi ({start} – {end})."
             )
         )
+        self.stdout.write("Sardorlar sayt uchun (/sardor/): telefon raqami va parol")
+        for manager, team, password in self.logins:
+            self.stdout.write(f"  {team}: {manager.full_name}  {manager.phone}  {password}")

@@ -105,6 +105,40 @@ def bosses():
     )
 
 
+@transaction.atomic
+def set_site_password(employee, password):
+    """Give a manager a login for the website: the username is the phone number."""
+    from django.contrib.auth import get_user_model
+
+    if not employee.is_manager:
+        raise ServiceError("Sayt hisobi faqat boshqaruvchilar uchun.")
+    if len(password or "") < 6:
+        raise ServiceError("Parol kamida 6 belgi bo'lishi kerak.")
+    user = employee.user
+    if user is None:
+        User = get_user_model()
+        if User.objects.filter(username=employee.phone).exists():
+            raise ServiceError("Bu telefon raqami bilan sayt hisobi allaqachon bor.")
+        user = User(username=employee.phone)
+    user.set_password(password)
+    user.is_active = True
+    user.save()
+    if employee.user_id != user.pk:
+        employee.user = user
+        employee.save(update_fields=["user"])
+    return user
+
+
+def site_employee(user):
+    """The active manager or boss behind a website login, or None."""
+    if not user.is_authenticated:
+        return None
+    employee = Employee.objects.filter(user=user, is_active=True).select_related("team").first()
+    if employee and (employee.is_manager or employee.is_boss):
+        return employee
+    return None
+
+
 # --- Permissions ------------------------------------------------------------
 
 
@@ -258,6 +292,15 @@ def get_entry(entry_id):
     if not entry:
         raise ServiceError("Yozuv topilmadi.")
     return entry
+
+
+def recent_entries(manager, days=7, day=None):
+    """Entries of the manager's workers for the last few days, newest first."""
+    day = day or today()
+    qs = _entry_qs().filter(date__gt=day - dt.timedelta(days=days), date__lte=day)
+    if not manager.is_boss:
+        qs = qs.filter(worker__team__manager=manager)
+    return list(qs.order_by("-date", "worker__full_name", "operation__name"))
 
 
 def pending_for(manager):

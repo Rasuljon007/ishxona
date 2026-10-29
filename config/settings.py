@@ -95,3 +95,7 @@ LOGGING = {
         "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
+
+# Managers sign in to their own pages under /sardor/; the boss uses /admin/.
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "dashboard"
