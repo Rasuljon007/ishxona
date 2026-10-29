@@ -38,6 +38,10 @@ python manage.py runbot         # bot
 python manage.py test           # testlar
 ```
 
+## Demo ma'lumotlar
+
+`python manage.py seed_demo` oxirgi ikki oy uchun demo yaratadi: ishchi turlari, 3 guruh va sardorlari, 23 ishchi, 4 mahsulot va qismlari, kunlik ish yozuvlari (tasdiqlangan, kutilayotgan, rad etilgan), brak, tahrirlar va narx o'zgarishlari. Demo xodimlarning telefoni `99800` bilan boshlanadi va ularda Telegram ID yo'q, shuning uchun bot ularga hech narsa yubormaydi. Qaytadan yaratish: `python manage.py seed_demo --reset`.
+
 ## Tuzilma
 
 - `core/models.py`: xodimlar, guruhlar, mahsulotlar, qismlar, ish yozuvlari, tahrirlar jurnali.

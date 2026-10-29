@@ -1,4 +1,5 @@
 import datetime as dt
+import os
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -219,3 +220,22 @@ class TranslitTests(TestCase):
 
     def test_keeps_tags_and_numbers(self):
         self.assertEqual(to_cyrillic("<b>Soni</b>: 120"), "<b>Сони</b>: 120")
+
+
+class SeedDemoTests(TestCase):
+    def test_creates_two_months_and_resets(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        call_command("seed_demo", days=10, stdout=open(os.devnull, "w"))
+        self.assertTrue(WorkEntry.objects.filter(status=WorkEntry.Status.APPROVED).exists())
+        self.assertFalse(Employee.objects.filter(telegram_id__isnull=False).exists())
+        self.assertFalse(Team.objects.filter(telegram_chat_id__isnull=False).exists())
+        self.assertEqual(PriceHistory.objects.count(), 0)
+        start = services.today() - dt.timedelta(days=9)
+        self.assertTrue(reports.summary_pdf(start, services.today()).startswith(b"%PDF"))
+        with self.assertRaises(CommandError):
+            call_command("seed_demo", days=10)
+        call_command("seed_demo", days=61, reset=True, stdout=open(os.devnull, "w"))
+        self.assertEqual(PriceHistory.objects.count(), 2)
+        self.assertEqual(Employee.objects.filter(role=Employee.Role.BOSS).count(), 1)
