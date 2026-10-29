@@ -28,6 +28,8 @@ class Command(BaseCommand):
         dp.message.outer_middleware(reset_state_on_menu)
         # common before the form routers so /start and /cancel work in the middle of a form.
         dp.include_routers(group.router, common.router, entry.router, manager.router, reports.router)
+        # Polling does not work while a webhook is set on the bot (e.g. left over from another service).
+        await bot.delete_webhook(drop_pending_updates=False)
         scheduler = asyncio.create_task(daily_loop(bot))
         try:
             await dp.start_polling(bot)
