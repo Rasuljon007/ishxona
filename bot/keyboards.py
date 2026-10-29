@@ -66,7 +66,8 @@ def main_menu(employee):
         rows = [
             ["btn_rep_today", "btn_rep_week"],
             ["btn_rep_month", "btn_rep_range"],
-            ["btn_pending", "btn_edit"],
+            ["btn_pending", "btn_enter_for"],
+            ["btn_edit", "btn_team_today"],
             ["btn_script"],
         ]
     elif employee.is_manager:
