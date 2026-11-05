@@ -8,7 +8,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from core import services, telegram
-from core.models import EntryEdit
+from core.models import Employee, EntryEdit, Operation
 from core.services import ServiceError
 
 
@@ -37,7 +37,7 @@ def manager_required(view):
 def dashboard(request):
     manager = request.manager
     day = services.today()
-    done, missing = services.team_day_status(manager, day)
+    roster = services.team_roster(manager, day)
     return render(
         request,
         "core/dashboard.html",
@@ -49,8 +49,8 @@ def dashboard(request):
             "pending": services.pending_for(manager),
             "editable": {e.pk for e in services.editable_entries(manager)},
             "recent": services.recent_entries(manager),
-            "done": done,
-            "missing": missing,
+            "roster": roster,
+            "missing": [r.worker for r in roster if not r.entries],
             "fields": EntryEdit.Field.choices,
         },
     )
@@ -118,3 +118,29 @@ def edit(request):
     label = dict(EntryEdit.Field.choices)[field]
     return f"O'zgartirildi: {entry.worker}, {entry.operation}: {label.lower()} {old} → {value}."
 
+
+
+def _int(value, message):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ServiceError(message)
+
+
+@_action
+def enter(request):
+    """The manager enters a worker's work for today; it is approved right away."""
+    worker = Employee.objects.select_related("team").filter(
+        pk=_int(request.POST.get("worker"), "Ishchini tanlang.")
+    ).first()
+    if worker is None or not services.can_manage(request.manager, worker):
+        raise ServiceError("Bu ishchi sizning guruhingizda emas.")
+    operation = Operation.objects.select_related("product").filter(
+        pk=_int(request.POST.get("operation"), "Ishni tanlang.")
+    ).first()
+    if operation is None:
+        raise ServiceError("Ishni tanlang.")
+    quantity = _int(request.POST.get("quantity"), "Son butun son bo'lishi kerak.")
+    entry = services.manager_enter(request.manager, worker, operation, quantity)
+    telegram.tell_worker(entry, "entered_for_you", manager=request.manager.full_name)
+    return f"Kiritildi: {entry.worker}, {entry.operation}, {entry.quantity} dona."

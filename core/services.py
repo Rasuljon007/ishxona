@@ -524,6 +524,53 @@ def team_day_status(manager, day):
     return done, missing
 
 
+def open_operations(worker, day):
+    """All operations the worker may still enter for this day, across products."""
+    if not worker.worker_type_id:
+        return []
+    taken = WorkEntry.objects.filter(worker=worker, date=day).exclude(
+        status=WorkEntry.Status.REJECTED
+    )
+    return list(
+        Operation.objects.filter(
+            is_active=True, product__is_active=True, worker_type_id=worker.worker_type_id
+        )
+        .exclude(pk__in=taken.values("operation_id"))
+        .select_related("product")
+        .order_by("product__name", "name")
+    )
+
+
+@dataclass
+class RosterRow:
+    worker: Employee
+    entries: list
+    operations: list
+    approved: int = 0
+    pending: int = 0
+
+
+def team_roster(manager, day):
+    """Every active worker the manager runs, with the day's entries and what can still be entered."""
+    workers = managed_workers(manager)
+    by_worker = defaultdict(list)
+    for e in _entry_qs().filter(date=day, worker__in=workers).order_by("operation__product__name", "operation__name"):
+        by_worker[e.worker_id].append(e)
+    rows = []
+    for w in sorted(workers, key=lambda w: ((w.team.name if w.team else ""), w.full_name)):
+        entries = by_worker[w.pk]
+        rows.append(
+            RosterRow(
+                worker=w,
+                entries=entries,
+                operations=open_operations(w, day),
+                approved=sum(e.quantity for e in entries if e.status == WorkEntry.Status.APPROVED),
+                pending=sum(e.quantity for e in entries if e.status == WorkEntry.Status.PENDING),
+            )
+        )
+    return rows
+
+
 def workers_without_entries(day):
     entered = WorkEntry.objects.filter(date=day).values("worker_id")
     return list(

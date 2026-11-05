@@ -18,5 +18,6 @@ urlpatterns = [
     path("sardor/hammasini-tasdiqlash/", views.approve_all, name="approve_all"),
     path("sardor/rad-etish/", views.reject, name="reject"),
     path("sardor/tahrirlash/", views.edit, name="edit"),
+    path("sardor/kiritish/", views.enter, name="enter"),
     path("", RedirectView.as_view(pattern_name="dashboard", permanent=False)),
 ]

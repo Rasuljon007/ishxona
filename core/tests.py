@@ -1,5 +1,6 @@
 import datetime as dt
 import os
+from unittest import mock
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -310,3 +311,66 @@ class ManagerSiteTests(TestCase):
         self.assertRedirects(self.client.get("/sardor/"), "/sardor/kirish/", fetch_redirect_response=False)
         with self.assertRaises(ServiceError):
             services.set_site_password(self.mine, "parol123")
+
+
+@override_settings(BOT_TOKEN="")
+class ManagerEnterSiteTests(TestCase):
+    def setUp(self):
+        sewer = WorkerType.objects.create(name="Tikuvchi")
+        ironer = WorkerType.objects.create(name="Dazmolchi")
+        product = Product.objects.create(name="Futbolka")
+        self.op = Operation.objects.create(product=product, worker_type=sewer, name="Yoqa", price=500)
+        self.op2 = Operation.objects.create(product=product, worker_type=sewer, name="Yeng", price=400)
+        self.iron = Operation.objects.create(product=product, worker_type=ironer, name="Dazmol", price=200)
+        self.manager = Employee.objects.create(full_name="Sardor", phone="998900000011", role=Employee.Role.MANAGER)
+        other = Employee.objects.create(full_name="Boshqa", phone="998900000012", role=Employee.Role.MANAGER)
+        team = Team.objects.create(name="T1", manager=self.manager)
+        team2 = Team.objects.create(name="T2", manager=other)
+        self.mine = Employee.objects.create(full_name="Mening ishchim", phone="998900000013", worker_type=sewer, team=team)
+        self.idle = Employee.objects.create(full_name="Hali kiritmagan", phone="998900000015", worker_type=sewer, team=team)
+        self.theirs = Employee.objects.create(full_name="Begona ishchi", phone="998900000014", worker_type=sewer, team=team2)
+        services.set_site_password(self.manager, "parol123")
+        self.client.login(username="998900000011", password="parol123")
+        noon = timezone.localtime().replace(hour=12, minute=0)
+        patcher = mock.patch("core.services.local_now", return_value=noon)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.day = noon.date()
+
+    def test_roster_lists_own_workers_with_their_operations(self):
+        page = self.client.get("/sardor/").content.decode()
+        self.assertIn("Ishchilarim", page)
+        self.assertIn("Mening ishchim", page)
+        self.assertIn("Hali kiritmagan", page)
+        self.assertNotIn("Begona ishchi", page)
+        self.assertIn(f'<option value="{self.op.pk}">Yoqa', page)
+        self.assertNotIn(">Dazmol<", page)
+
+    def test_enter_creates_approved_entry_and_hides_operation(self):
+        self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.op.pk, "quantity": 25})
+        entry = WorkEntry.objects.get(worker=self.mine, operation=self.op, date=self.day)
+        self.assertEqual(entry.status, WorkEntry.Status.APPROVED)
+        self.assertEqual(entry.entered_by, self.manager)
+        self.assertEqual(entry.quantity, 25)
+        rows = {r.worker.pk: r for r in services.team_roster(self.manager, self.day)}
+        self.assertEqual(rows[self.mine.pk].approved, 25)
+        self.assertEqual([o.pk for o in rows[self.mine.pk].operations], [self.op2.pk])
+
+    def test_enter_twice_is_refused(self):
+        data = {"worker": self.mine.pk, "operation": self.op.pk, "quantity": 5}
+        self.client.post("/sardor/kiritish/", data)
+        response = self.client.post("/sardor/kiritish/", dict(data, quantity=7), follow=True)
+        self.assertContains(response, "allaqachon")
+        self.assertEqual(WorkEntry.objects.filter(worker=self.mine).count(), 1)
+
+    def test_cannot_enter_for_other_team_or_wrong_type(self):
+        self.client.post("/sardor/kiritish/", {"worker": self.theirs.pk, "operation": self.op.pk, "quantity": 5})
+        self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.iron.pk, "quantity": 5})
+        self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.op.pk, "quantity": "abc"})
+        self.assertFalse(WorkEntry.objects.exists())
+
+    def test_enter_refused_after_day_closes(self):
+        late = timezone.localtime().replace(hour=22, minute=0)
+        with mock.patch("core.services.local_now", return_value=late):
+            self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.op.pk, "quantity": 5})
+        self.assertFalse(WorkEntry.objects.exists())
