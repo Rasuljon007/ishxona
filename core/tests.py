@@ -428,3 +428,21 @@ class AdminMenuTests(TestCase):
         page = self.client.get("/admin/").content.decode()
         self.assertIn("Xodimlar", page)
         self.assertNotIn("/admin/auth/", page)
+
+    def test_dashboard_and_lists_render(self):
+        from django.contrib.auth import get_user_model
+        get_user_model().objects.create_superuser("boshliq", "", "parol123")
+        self.client.login(username="boshliq", password="parol123")
+        call_command_quiet("seed_demo")
+        page = self.client.get("/admin/").content.decode()
+        self.assertIn("Bugun tasdiqlangan", page)
+        self.assertIn("Guruhlar: bugun", page)
+        for url in ["/admin/core/workentry/", "/admin/core/employee/", "/admin/core/product/1/change/"]:
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        self.client.logout()
+        self.assertIn("Kirish", self.client.get("/admin/login/").content.decode())
+
+
+def call_command_quiet(name, *args):
+    from django.core.management import call_command
+    call_command(name, *args, stdout=io.StringIO())
