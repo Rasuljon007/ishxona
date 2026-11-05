@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin
+from django.contrib.auth.models import Group, User
 
 from core import services
 from core.models import (
@@ -13,6 +14,11 @@ from core.models import (
     WorkerType,
 )
 from core.reports import money
+
+# The boss works with Xodimlar only; site logins are made from the employee page
+# ("sayt paroli"), so Django's own Users and Groups pages are hidden. Accounts stay.
+admin.site.unregister(User)
+admin.site.unregister(Group)
 
 
 @admin.register(WorkerType)

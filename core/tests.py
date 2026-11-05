@@ -414,3 +414,17 @@ class ReviewFixTests(TestCase):
         call_command("seed_demo", "--days", "3", "--reset", stdout=out)
         real.refresh_from_db()
         self.assertEqual(real.team_id, team.pk)
+
+
+@override_settings(STORAGES={
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+})
+class AdminMenuTests(TestCase):
+    def test_auth_section_hidden_but_login_works(self):
+        from django.contrib.auth import get_user_model
+        get_user_model().objects.create_superuser("boshliq", "", "parol123")
+        self.assertTrue(self.client.login(username="boshliq", password="parol123"))
+        page = self.client.get("/admin/").content.decode()
+        self.assertIn("Xodimlar", page)
+        self.assertNotIn("/admin/auth/", page)
