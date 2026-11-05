@@ -1,3 +1,4 @@
+import io
 import datetime as dt
 import os
 from unittest import mock
@@ -374,3 +375,42 @@ class ManagerEnterSiteTests(TestCase):
         with mock.patch("core.services.local_now", return_value=late):
             self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.op.pk, "quantity": 5})
         self.assertFalse(WorkEntry.objects.exists())
+
+
+@override_settings(BOT_TOKEN="")
+class ReviewFixTests(TestCase):
+    def test_site_edit_notifies_worker(self):
+        sewer = WorkerType.objects.create(name="Tikuvchi")
+        op = Operation.objects.create(product=Product.objects.create(name="F"), worker_type=sewer, name="Yoqa", price=500)
+        manager = Employee.objects.create(full_name="Sardor", phone="998900000021", role=Employee.Role.MANAGER)
+        team = Team.objects.create(name="T", manager=manager)
+        worker = Employee.objects.create(full_name="Ishchi", phone="998900000022", worker_type=sewer, team=team, telegram_id=77)
+        noon = timezone.localtime().replace(hour=12, minute=0)
+        services.set_site_password(manager, "parol123")
+        self.client.login(username="998900000021", password="parol123")
+        with mock.patch("core.services.local_now", return_value=noon), mock.patch("core.telegram.send_message") as send:
+            entry = services.manager_enter(manager, worker, op, 10)
+            self.client.post("/sardor/tahrirlash/", {"entry": entry.pk, "field": "quantity", "value": 8, "comment": "Qayta sanaldi"})
+        entry.refresh_from_db()
+        self.assertEqual(entry.quantity, 8)
+        send.assert_called_once()
+        self.assertEqual(send.call_args[0][0], 77)
+        self.assertIn("10 → 8", send.call_args[0][1])
+
+    def test_phone_change_updates_site_login(self):
+        manager = Employee.objects.create(full_name="Sardor", phone="998900000031", role=Employee.Role.MANAGER)
+        services.set_site_password(manager, "parol123")
+        manager.phone = "998900000039"
+        manager.save()
+        services.sync_site_username(manager)
+        self.assertTrue(self.client.login(username="998900000039", password="parol123"))
+
+    def test_seed_reset_keeps_team_with_real_members(self):
+        from django.core.management import call_command
+        out = io.StringIO()
+        call_command("seed_demo", "--days", "3", stdout=out)
+        team = Team.objects.first()
+        real = Employee.objects.create(full_name="Haqiqiy", phone="998901112233", team=team)
+        call_command("seed_demo", "--days", "3", "--reset", stdout=out)
+        real.refresh_from_db()
+        self.assertEqual(real.team_id, team.pk)

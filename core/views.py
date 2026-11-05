@@ -115,6 +115,15 @@ def edit(request):
         raise ServiceError("Noma'lum maydon.")
     old = getattr(entry, field)
     entry = services.edit_entry(request.manager, entry, field, value, request.POST.get("comment"))
+    telegram.tell_worker(
+        entry,
+        "edited_for_you",
+        manager=request.manager.full_name,
+        field=telegram.field_label(field, entry.worker.script),
+        old=old,
+        new=value,
+        comment=request.POST.get("comment", "").strip(),
+    )
     label = dict(EntryEdit.Field.choices)[field]
     return f"O'zgartirildi: {entry.worker}, {entry.operation}: {label.lower()} {old} → {value}."
 

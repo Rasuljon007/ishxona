@@ -131,7 +131,9 @@ class Command(BaseCommand):
             demo = Employee.objects.filter(phone__startswith=DEMO_PHONE_PREFIX)
             get_user_model().objects.filter(employee__in=demo).delete()
             WorkEntry.objects.filter(worker__in=demo).delete()
-            Team.objects.filter(name__in=[t[0] for t in TEAMS]).delete()
+            # Keep a demo-named team that real employees were put into; only its demo manager goes.
+            real = Employee.objects.exclude(phone__startswith=DEMO_PHONE_PREFIX)
+            Team.objects.filter(name__in=[t[0] for t in TEAMS]).exclude(members__in=real).delete()
             demo.delete()
             Product.objects.filter(name__in=PRODUCTS).delete()
         self.stdout.write("Avvalgi demo ma'lumotlar o'chirildi.")
@@ -172,7 +174,7 @@ class Command(BaseCommand):
             manager = Employee.objects.create(
                 full_name=manager_name, phone=self.phone(), role=Employee.Role.MANAGER
             )
-            team = Team.objects.create(name=tname, manager=manager)
+            team, _ = Team.objects.update_or_create(name=tname, defaults={"manager": manager})
             manager.team = team
             manager.save()
             teams.append(team)

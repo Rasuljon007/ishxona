@@ -29,3 +29,9 @@ def tell_worker(entry, key, **extra):
 
     worker = entry.worker
     send_message(worker.telegram_id, t(key, worker.script, **entry_fields(entry), **extra))
+
+
+def field_label(field, script):
+    from bot.texts import t
+
+    return t(f"field_{field}", script)

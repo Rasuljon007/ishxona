@@ -129,6 +129,19 @@ def set_site_password(employee, password):
     return user
 
 
+def sync_site_username(employee):
+    """Keep the website login equal to the phone number after the phone changes."""
+    from django.contrib.auth import get_user_model
+
+    user = employee.user
+    if user is None or user.username == employee.phone:
+        return
+    if get_user_model().objects.filter(username=employee.phone).exclude(pk=user.pk).exists():
+        raise ServiceError("Bu telefon raqami bilan sayt hisobi allaqachon bor.")
+    user.username = employee.phone
+    user.save(update_fields=["username"])
+
+
 def site_employee(user):
     """The active manager or boss behind a website login, or None."""
     if not user.is_authenticated:

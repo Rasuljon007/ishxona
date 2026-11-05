@@ -68,6 +68,11 @@ class EmployeeAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        if obj.user_id and obj.user.username != obj.phone:
+            try:
+                services.sync_site_username(obj)
+            except services.ServiceError as err:
+                self.message_user(request, str(err), level="error")
         password = form.cleaned_data.get("site_password")
         if password:
             try:
