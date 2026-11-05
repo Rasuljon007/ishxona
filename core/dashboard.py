@@ -90,7 +90,11 @@ def dashboard_callback(request, context):
     teams = (
         Team.objects.select_related("manager")
         .annotate(
-            members_active=Count("members", filter=Q(members__is_active=True), distinct=True),
+            members_active=Count(
+                "members",
+                filter=Q(members__is_active=True, members__role=Employee.Role.WORKER),
+                distinct=True,
+            ),
         )
         .order_by("name")
     )
