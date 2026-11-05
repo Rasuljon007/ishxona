@@ -1,0 +1,104 @@
+{% extends "admin/base.html" %}
+{% load i18n unfold %}
+
+{% block title %}Bosh sahifa | {{ site_title }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+  .ix-hero { background:linear-gradient(135deg,var(--color-primary-600),var(--color-primary-800)); color:#fff;
+             border-radius:var(--border-radius,8px); padding:22px 24px; margin-bottom:24px; position:relative; overflow:hidden; }
+  .ix-hero:after { content:""; position:absolute; right:-40px; top:-60px; width:220px; height:220px; border-radius:50%;
+                   background:rgba(255,255,255,.08); }
+  .ix-hero h1 { font-size:22px; font-weight:700; margin:0; letter-spacing:-.2px; }
+  .ix-hero p { opacity:.8; margin:4px 0 0; }
+  .ix-hero .ix-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; position:relative; z-index:1; }
+  .ix-hero a.ix-btn { display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.16); color:#fff;
+                      border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:6px 14px; font-weight:600; font-size:13px; }
+  .ix-hero a.ix-btn:hover { background:rgba(255,255,255,.26); }
+  .ix-kpis { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(min(220px,calc(50% - 8px)),1fr)); margin-bottom:24px; }
+  .ix-icon { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; flex:none;
+             background:var(--color-primary-100); color:var(--color-primary-700); }
+  .dark .ix-icon { background:color-mix(in oklab,var(--color-primary-500) 20%,transparent); color:var(--color-primary-300); }
+  .ix-value { font-size:clamp(18px,4.6vw,24px); font-weight:700; letter-spacing:-.3px; line-height:1.2; margin-top:12px; }
+  .ix-bar { height:6px; border-radius:99px; background:var(--color-base-200); margin-top:10px; overflow:hidden; }
+  .dark .ix-bar { background:var(--color-base-800); }
+  .ix-bar > span { display:block; height:100%; background:var(--color-primary-600); border-radius:99px; }
+  .ix-grid { display:grid; gap:24px; grid-template-columns:minmax(0,1fr); margin-bottom:24px; }
+  @media (min-width:1024px) { .ix-grid { grid-template-columns:minmax(0,2fr) minmax(0,1fr); } }
+  .ix-list > a { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--color-base-200); }
+  .dark .ix-list > a { border-color:var(--color-base-800); }
+  .ix-list > a:last-child { border-bottom:0; }
+  .ix-up { color:#16a34a; } .ix-down { color:#dc2626; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ix-hero">
+  <h1>Assalomu alaykum{% if user.first_name %}, {{ user.first_name }}{% endif %}!</h1>
+  <p>Bugun {{ today|date:"d.m.Y" }} · ishxonadagi bugungi holat</p>
+  <div class="ix-actions">
+    <a class="ix-btn" href="{{ entries_url }}?status__exact=pending"><span class="material-symbols-outlined text-base">pending_actions</span>Tasdiq kutayotganlar</a>
+    <a class="ix-btn" href="{% url 'admin:core_employee_add' %}"><span class="material-symbols-outlined text-base">person_add</span>Xodim qo'shish</a>
+    <a class="ix-btn" href="{% url 'admin:core_product_add' %}"><span class="material-symbols-outlined text-base">add_box</span>Mahsulot qo'shish</a>
+  </div>
+</div>
+
+<div class="ix-kpis">
+  {% for k in kpis %}
+    {% component "unfold/components/card.html" with href=k.href %}
+      <div class="flex items-center gap-3">
+        <div class="ix-icon"><span class="material-symbols-outlined">{{ k.icon }}</span></div>
+        <div class="text-sm font-medium text-font-subtle-light dark:text-font-subtle-dark">{{ k.title }}</div>
+      </div>
+      <div class="ix-value text-font-important-light dark:text-font-important-dark">{{ k.value }}</div>
+      {% if k.progress is not None %}<div class="ix-bar"><span style="width:{{ k.progress }}%"></span></div>{% endif %}
+      <div class="text-xs mt-2 text-font-subtle-light dark:text-font-subtle-dark">{{ k.note }}</div>
+    {% endcomponent %}
+  {% endfor %}
+</div>
+
+<div class="ix-grid">
+  {% component "unfold/components/card.html" with title="Oxirgi 14 kun: tasdiqlangan dona" %}
+    <div class="flex items-baseline gap-2 mb-4">
+      <span class="ix-value" style="margin:0">{{ week_total }}</span>
+      <span class="text-sm text-font-subtle-light dark:text-font-subtle-dark">dona shu hafta</span>
+      {% if week_change is not None %}
+        <span class="text-sm font-semibold {% if week_change >= 0 %}ix-up{% else %}ix-down{% endif %}">
+          {% if week_change >= 0 %}▲ +{% else %}▼ {% endif %}{{ week_change }}%</span>
+      {% endif %}
+    </div>
+    {% component "unfold/components/chart/bar.html" with data=chart height=260 %}{% endcomponent %}
+  {% endcomponent %}
+
+  {% component "unfold/components/card.html" with title="Tasdiq kutayotgan yozuvlar" %}
+    {% if latest_pending %}
+      <div class="ix-list">
+        {% for e in latest_pending %}
+          <a href="{% url 'admin:core_workentry_change' e.pk %}">
+            <div class="ix-icon" style="width:34px;height:34px;border-radius:10px"><span class="material-symbols-outlined text-base">schedule</span></div>
+            <div class="min-w-0 grow">
+              <div class="font-semibold truncate text-font-important-light dark:text-font-important-dark">{{ e.worker.full_name }}</div>
+              <div class="text-xs truncate text-font-subtle-light dark:text-font-subtle-dark">{{ e.operation.product }} / {{ e.operation.name }} · {{ e.date|date:"d.m" }}</div>
+            </div>
+            {% component "unfold/helpers/label.html" with variant="warning" text=e.quantity|stringformat:"s"|add:" dona" %}{% endcomponent %}
+          </a>
+        {% endfor %}
+      </div>
+      <a class="text-primary-600 font-semibold text-sm inline-block mt-3" href="{{ entries_url }}?status__exact=pending">Hammasini ko'rish →</a>
+    {% else %}
+      <div class="text-center py-8 text-font-subtle-light dark:text-font-subtle-dark">
+        <span class="material-symbols-outlined text-4xl">task_alt</span>
+        <p class="mt-2">Hammasi tasdiqlangan</p>
+      </div>
+    {% endif %}
+  {% endcomponent %}
+</div>
+
+{% component "unfold/components/card.html" with title="Guruhlar: bugun" %}
+  {% component "unfold/components/table.html" with table=team_table card_included=1 striped=1 %}{% endcomponent %}
+{% endcomponent %}
+{% endblock %}

@@ -1,0 +1,205 @@
+# Uzbek labels for the admin panel theme (django-unfold has no Uzbek catalog).
+# After editing, rebuild the .mo: python manage.py compilemessages -l uz
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: uz\n"
+
+msgid "Add row"
+msgstr "Qator qo'shish"
+
+msgid "All applications"
+msgstr "Barcha bo'limlar"
+
+msgid "Apply Filters"
+msgstr "Filtrlash"
+
+msgid "Cancel"
+msgstr "Bekor qilish"
+
+msgid "Clear all filters"
+msgstr "Barcha filtrlarni tozalash"
+
+msgid "Clear selection"
+msgstr "Tanlovni bekor qilish"
+
+msgid "Click here to select the objects across all pages"
+msgstr "Barcha sahifalardagi yozuvlarni tanlash uchun bosing"
+
+msgid "Close"
+msgstr "Yopish"
+
+msgid "Dark"
+msgstr "Tungi"
+
+msgid "Date"
+msgstr "Sana"
+
+msgid "Date from"
+msgstr "Sanadan"
+
+msgid "Date to"
+msgstr "Sanagacha"
+
+msgid "Expand row"
+msgstr "Qatorni ochish"
+
+msgid "False"
+msgstr "Yo'q"
+
+msgid "Filters"
+msgstr "Filtrlar"
+
+msgid "From"
+msgstr "Dan"
+
+msgid "General"
+msgstr "Asosiy"
+
+msgid "Go back"
+msgstr "Orqaga"
+
+msgid "Hide counts"
+msgstr "Sonlarni yashirish"
+
+msgid "Light"
+msgstr "Kunduzgi"
+
+msgid "Log in again"
+msgstr "Qayta kirish"
+
+msgid "More actions"
+msgstr "Boshqa amallar"
+
+msgid "Navigate"
+msgstr "O'tish"
+
+msgid "Next"
+msgstr "Keyingi"
+
+msgid "No data"
+msgstr "Ma'lumot yo'q"
+
+msgid "No results found"
+msgstr "Hech narsa topilmadi"
+
+msgid "No, take me back"
+msgstr "Yo'q, orqaga qaytish"
+
+msgid "Nothing matched your search"
+msgstr "Qidiruv bo'yicha hech narsa topilmadi"
+
+msgid "Objects"
+msgstr "Yozuvlar"
+
+msgid "Previous"
+msgstr "Oldingi"
+
+msgid "Recent searches"
+msgstr "Oxirgi qidiruvlar"
+
+msgid "Reset filters"
+msgstr "Filtrlarni tozalash"
+
+msgid "Run"
+msgstr "Bajarish"
+
+msgid "Save and add another"
+msgstr "Saqlash va yana qo'shish"
+
+msgid "Save and continue editing"
+msgstr "Saqlash va tahrirlashda davom etish"
+
+msgid "Save and view"
+msgstr "Saqlash va ko'rish"
+
+msgid "Save as new"
+msgstr "Yangi sifatida saqlash"
+
+msgid "Search apps and models..."
+msgstr "Bo'lim qidirish..."
+
+msgid "Select"
+msgstr "Tanlash"
+
+msgid "Select action"
+msgstr "Amalni tanlang"
+
+msgid "Select action to run"
+msgstr "Bajariladigan amalni tanlang"
+
+msgid "Select all rows"
+msgstr "Barcha qatorlarni tanlash"
+
+msgid "Select record"
+msgstr "Belgilash"
+
+msgid "Select value"
+msgstr "Qiymatni tanlang"
+
+msgid "Show all"
+msgstr "Hammasini ko'rsatish"
+
+msgid "Show counts"
+msgstr "Sonlarni ko'rsatish"
+
+msgid "Submit"
+msgstr "Yuborish"
+
+msgid "System"
+msgstr "Tizim bo'yicha"
+
+msgid "Thanks for spending some quality time with the web site today."
+msgstr "Bugun saytdan foydalanganingiz uchun rahmat."
+
+msgid "This item will be deleted."
+msgstr "Bu yozuv o'chiriladi."
+
+msgid "This page yielded into no results. Create a new item or reset your filters."
+msgstr "Bu yerda hech narsa yo'q. Yangi yozuv qo'shing yoki filtrlarni tozalang."
+
+msgid "To"
+msgstr "Gacha"
+
+msgid "Toggle password visibility"
+msgstr "Parolni ko'rsatish"
+
+msgid "Toggle sorting"
+msgstr "Saralash"
+
+msgid "True"
+msgstr "Ha"
+
+msgid "Type to search"
+msgstr "Qidirish..."
+
+msgid "Value"
+msgstr "Qiymat"
+
+msgid "Yes, I’m sure"
+msgstr "Ha, ishonchim komil"
+
+msgid "You don’t have permission to view or edit anything."
+msgstr "Sizda hech narsani ko'rish yoki o'zgartirish huquqi yo'q."
+
+msgid "You have been successfully logged out from the administration"
+msgstr "Boshqaruv panelidan chiqdingiz"
+
+msgid "Welcome back to"
+msgstr "Xush kelibsiz,"
+
+msgid "Return to site"
+msgstr "Sardorlar sahifasi"
+
+msgid "History"
+msgstr "Tarix"
+
+msgid "Log in"
+msgstr "Kirish"
+
+msgid "Username"
+msgstr "Login"
+
+msgid "username"
+msgstr "login"
+
