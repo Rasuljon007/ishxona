@@ -109,7 +109,15 @@ class Progress:
         return (self.order.deadline - today()).days
 
 
-def progress(order):
+def _shows_worker(viewer, worker):
+    if viewer is None or viewer.is_boss:
+        return True
+    return bool(worker.team_id) and worker.team.manager_id == viewer.pk
+
+
+def progress(order, viewer=None):
+    """Progress of an order. Part totals always cover the whole workshop; when `viewer` is a
+    manager (not the boss), the per-worker table shows only that manager's workers."""
     operations = list(order.product.operations.filter(is_active=True).order_by("pk"))
     linked_ops = WorkEntry.objects.filter(order=order).values_list("operation_id", flat=True)
     # A part switched off after work started still shows what was sewn for it.
@@ -119,7 +127,7 @@ def progress(order):
     workers = {}
     entries = (
         WorkEntry.objects.filter(NOT_REJECTED, order=order)
-        .select_related("worker")
+        .select_related("worker", "worker__team")
         .order_by("worker__full_name")
     )
     index = {op.pk: i for i, op in enumerate(operations)}
@@ -127,17 +135,21 @@ def progress(order):
         part = parts.get(e.operation_id)
         if part is None:
             continue
-        row = workers.get(e.worker_id)
-        if row is None:
-            row = workers[e.worker_id] = WorkerRow(worker=e.worker, cells=[0] * len(operations))
+        row = None
+        if _shows_worker(viewer, e.worker):
+            row = workers.get(e.worker_id)
+            if row is None:
+                row = workers[e.worker_id] = WorkerRow(worker=e.worker, cells=[0] * len(operations))
         if e.status == WorkEntry.Status.APPROVED:
             part.done += e.net_quantity
             part.defect += e.defect_quantity
-            row.cells[index[e.operation_id]] += e.net_quantity
-            row.total += e.net_quantity
+            if row:
+                row.cells[index[e.operation_id]] += e.net_quantity
+                row.total += e.net_quantity
         else:
             part.pending += e.quantity
-            row.pending += e.quantity
+            if row:
+                row.pending += e.quantity
     return Progress(order=order, parts=list(parts.values()), workers=list(workers.values()))
 
 

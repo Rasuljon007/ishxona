@@ -162,7 +162,7 @@ def order_list(request):
     qs = Order.objects.select_related("product")
     if not show_closed:
         qs = qs.filter(status__in=Order.OPEN_STATUSES + (Order.Status.DONE,))
-    items = [orders.progress(o) for o in qs]
+    items = [orders.progress(o, request.manager) for o in qs]
     items.sort(key=lambda p: (not p.order.is_open, p.order.deadline is None, p.order.deadline or services.today(), p.order.pk))
     return render(
         request,
@@ -175,5 +175,5 @@ def order_list(request):
 def order_detail(request, pk):
     order = get_object_or_404(Order.objects.select_related("product"), pk=pk)
     return render(
-        request, "core/orders/detail.html", {"manager": request.manager, "p": orders.progress(order)}
+        request, "core/orders/detail.html", {"manager": request.manager, "p": orders.progress(order, request.manager)}
     )

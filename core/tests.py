@@ -547,6 +547,24 @@ class OrderTests(TestCase):
         self.assertIn("Ali", page)
         self.assertIn("Zakazlar", self.client.get("/sardor/").content.decode())
 
+    def test_manager_sees_only_own_workers_in_order(self):
+        order = Order.objects.create(product=self.pants, quantity=100)
+        other = Employee.objects.create(full_name="Boshqa sardor", phone="905555555", role=Employee.Role.MANAGER)
+        team2 = Team.objects.create(name="T2", manager=other)
+        stranger = Employee.objects.create(
+            full_name="Begona ishchi", phone="906666666", worker_type=self.ali.worker_type, team=team2
+        )
+        services.manager_enter(self.manager, self.ali, self.belt, 20, now=at(10))
+        services.manager_enter(other, stranger, self.belt, 30, now=at(10))
+        services.set_site_password(self.manager, "parol123")
+        self.client.login(username=self.manager.phone, password="parol123")
+        page = self.client.get(f"/sardor/zakazlar/{order.pk}/").content.decode()
+        self.assertIn("Ali", page)
+        self.assertNotIn("Begona ishchi", page)
+        # The order total still counts the whole workshop.
+        self.assertIn("50 / 100", page)
+        self.assertEqual(len(orders.progress(order, self.boss).workers), 2)
+
 
 @override_settings(STORAGES={
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},

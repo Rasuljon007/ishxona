@@ -52,7 +52,7 @@
   {% endfor %}
 </div>
 
-<b>Ishchilar bo'yicha (dona)</b>
+<b>Ishchilar bo'yicha (dona)</b>{% if manager and not manager.is_boss %} <span class="zk-muted">· faqat sizning guruhingiz</span>{% endif %}
 {% if p.workers %}
 <div class="zk-scroll"><table>
   <tr><th>Ishchi</th>{% for part in p.parts %}<th>{{ part.operation.name }}</th>{% endfor %}<th>Jami</th><th>Kutilmoqda</th></tr>
