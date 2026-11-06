@@ -1,0 +1,67 @@
+{% comment %}Progress of one order: a bar per part and a table of who sewed what. Used in the admin and on the sardor page.{% endcomment %}
+<div class="zk">
+<style>
+  .zk { --zk-ok:#16a34a; --zk-warn:#d97706; --zk-bad:#dc2626; --zk-track:rgba(127,127,127,.18); font-size:14px; }
+  .zk .zk-big { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+  .zk .zk-big b { font-size:22px; }
+  .zk .zk-bar { height:10px; border-radius:99px; background:var(--zk-track); overflow:hidden; }
+  .zk .zk-bar > span { display:block; height:100%; border-radius:99px; background:var(--zk-ok); }
+  .zk .zk-bar.zk-thin { height:7px; }
+  .zk .zk-late { color:var(--zk-bad); font-weight:600; }
+  .zk .zk-soon { color:var(--zk-warn); font-weight:600; }
+  .zk .zk-bar.late > span { background:var(--zk-bad); }
+  .zk .zk-bar.soon > span { background:var(--zk-warn); }
+  .zk .zk-parts { display:grid; gap:10px; margin:14px 0 18px; }
+  .zk .zk-part-head { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:3px; }
+  .zk .zk-muted { opacity:.65; }
+  .zk table { width:100%; border-collapse:collapse; }
+  .zk th, .zk td { padding:6px 8px; border-bottom:1px solid var(--zk-track); text-align:right; white-space:nowrap; }
+  .zk th:first-child, .zk td:first-child { text-align:left; }
+  .zk th { font-weight:600; font-size:13px; }
+  .zk .zk-scroll { overflow-x:auto; }
+</style>
+{% with order=p.order %}
+<div class="zk-big">
+  <b>{{ p.done }} / {{ order.quantity }} dona tayyor</b>
+  <span>{{ p.percent }}%</span>
+  <span class="zk-muted">· qoldi {{ p.left }} dona</span>
+  {% if order.deadline %}
+    <span class="{% if p.deadline_state %}zk-{{ p.deadline_state }}{% else %}zk-muted{% endif %}">
+      · muddat {{ order.deadline|date:"d.m.Y" }}
+      {% if p.deadline_state == "late" %}(muddat o'tib ketgan){% elif p.days_left is not None and order.is_open %}({{ p.days_left }} kun qoldi){% endif %}
+    </span>
+  {% endif %}
+</div>
+<div class="zk-bar {{ p.deadline_state }}"><span style="width:{{ p.percent }}%"></span></div>
+<div class="zk-muted" style="margin-top:4px">Mahsulot barcha qismlari tikilgandagina tayyor hisoblanadi, shuning uchun eng orqada qolgan qism bo'yicha sanaladi. Faqat tasdiqlangan ishlar, brak ayirilgan.</div>
+
+<div class="zk-parts">
+  {% for part in p.parts %}
+  <div>
+    <div class="zk-part-head">
+      <span><b>{{ part.operation.name }}</b>{% if not part.operation.is_active %} <span class="zk-muted">(faol emas)</span>{% endif %}</span>
+      <span>{{ part.done }} / {{ part.quantity }} · {{ part.percent }}%
+        {% if part.pending %}<span class="zk-soon"> · +{{ part.pending }} tasdiq kutmoqda</span>{% endif %}
+        {% if part.defect %}<span class="zk-muted"> · brak {{ part.defect }}</span>{% endif %}
+      </span>
+    </div>
+    <div class="zk-bar zk-thin"><span style="width:{{ part.percent }}%"></span></div>
+  </div>
+  {% empty %}
+  <div class="zk-muted">Bu mahsulotda faol qism yo'q. Avval mahsulotga qismlar qo'shing.</div>
+  {% endfor %}
+</div>
+
+<b>Ishchilar bo'yicha (dona)</b>{% if manager and not manager.is_boss %} <span class="zk-muted">· faqat sizning guruhingiz</span>{% endif %}
+{% if p.workers %}
+<div class="zk-scroll"><table>
+  <tr><th>Ishchi</th>{% for part in p.parts %}<th>{{ part.operation.name }}</th>{% endfor %}<th>Jami</th><th>Kutilmoqda</th></tr>
+  {% for row in p.workers %}
+  <tr><td>{{ row.worker.full_name }}</td>{% for c in row.cells %}<td>{{ c|default:"·" }}</td>{% endfor %}<td><b>{{ row.total }}</b></td><td>{{ row.pending|default:"·" }}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<div class="zk-muted" style="margin-top:6px">Hali bu zakazga ish kiritilmagan.</div>
+{% endif %}
+{% endwith %}
+</div>

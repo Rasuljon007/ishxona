@@ -14,6 +14,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from core import orders
 from core.models import Employee, EntryEdit, Operation, Product, Team, WorkEntry
 
 
@@ -103,6 +104,53 @@ def bosses():
     return list(
         Employee.objects.filter(role=Employee.Role.BOSS, is_active=True, telegram_id__isnull=False)
     )
+
+
+@transaction.atomic
+def set_site_password(employee, password):
+    """Give a manager a login for the website: the username is the phone number."""
+    from django.contrib.auth import get_user_model
+
+    if not employee.is_manager:
+        raise ServiceError("Sayt hisobi faqat boshqaruvchilar uchun.")
+    if len(password or "") < 6:
+        raise ServiceError("Parol kamida 6 belgi bo'lishi kerak.")
+    user = employee.user
+    if user is None:
+        User = get_user_model()
+        if User.objects.filter(username=employee.phone).exists():
+            raise ServiceError("Bu telefon raqami bilan sayt hisobi allaqachon bor.")
+        user = User(username=employee.phone)
+    user.set_password(password)
+    user.is_active = True
+    user.save()
+    if employee.user_id != user.pk:
+        employee.user = user
+        employee.save(update_fields=["user"])
+    return user
+
+
+def sync_site_username(employee):
+    """Keep the website login equal to the phone number after the phone changes."""
+    from django.contrib.auth import get_user_model
+
+    user = employee.user
+    if user is None or user.username == employee.phone:
+        return
+    if get_user_model().objects.filter(username=employee.phone).exclude(pk=user.pk).exists():
+        raise ServiceError("Bu telefon raqami bilan sayt hisobi allaqachon bor.")
+    user.username = employee.phone
+    user.save(update_fields=["username"])
+
+
+def site_employee(user):
+    """The active manager or boss behind a website login, or None."""
+    if not user.is_authenticated:
+        return None
+    employee = Employee.objects.filter(user=user, is_active=True).select_related("team").first()
+    if employee and (employee.is_manager or employee.is_boss):
+        return employee
+    return None
 
 
 # --- Permissions ------------------------------------------------------------
@@ -202,12 +250,14 @@ def submit_entry(worker, operation, quantity, now=None):
         existing.approved_by = None
         existing.approved_at = None
         existing.reject_reason = ""
+        existing.order = orders.pick_order(operation)
         existing.save()
         return get_entry(existing.pk)
     entry = WorkEntry.objects.create(
         date=day,
         worker=worker,
         operation=operation,
+        order=orders.pick_order(operation),
         quantity=quantity,
         unit_price=operation.price,
         entered_by=worker,
@@ -237,6 +287,7 @@ def manager_enter(manager, worker, operation, quantity, now=None):
         date=day,
         worker=worker,
         operation=operation,
+        order=orders.pick_order(operation),
         quantity=quantity,
         unit_price=operation.price,
         status=WorkEntry.Status.APPROVED,
@@ -249,7 +300,7 @@ def manager_enter(manager, worker, operation, quantity, now=None):
 
 def _entry_qs():
     return WorkEntry.objects.select_related(
-        "worker", "worker__team", "operation", "operation__product", "entered_by", "approved_by"
+        "worker", "worker__team", "operation", "operation__product", "entered_by", "approved_by", "order"
     )
 
 
@@ -258,6 +309,15 @@ def get_entry(entry_id):
     if not entry:
         raise ServiceError("Yozuv topilmadi.")
     return entry
+
+
+def recent_entries(manager, days=7, day=None):
+    """Entries of the manager's workers for the last few days, newest first."""
+    day = day or today()
+    qs = _entry_qs().filter(date__gt=day - dt.timedelta(days=days), date__lte=day)
+    if not manager.is_boss:
+        qs = qs.filter(worker__team__manager=manager)
+    return list(qs.order_by("-date", "worker__full_name", "operation__name"))
 
 
 def pending_for(manager):
@@ -479,6 +539,53 @@ def team_day_status(manager, day):
     done = [(w, stats[w.pk]) for w in workers if w.pk in stats]
     missing = [w for w in workers if w.pk not in stats]
     return done, missing
+
+
+def open_operations(worker, day):
+    """All operations the worker may still enter for this day, across products."""
+    if not worker.worker_type_id:
+        return []
+    taken = WorkEntry.objects.filter(worker=worker, date=day).exclude(
+        status=WorkEntry.Status.REJECTED
+    )
+    return list(
+        Operation.objects.filter(
+            is_active=True, product__is_active=True, worker_type_id=worker.worker_type_id
+        )
+        .exclude(pk__in=taken.values("operation_id"))
+        .select_related("product")
+        .order_by("product__name", "name")
+    )
+
+
+@dataclass
+class RosterRow:
+    worker: Employee
+    entries: list
+    operations: list
+    approved: int = 0
+    pending: int = 0
+
+
+def team_roster(manager, day):
+    """Every active worker the manager runs, with the day's entries and what can still be entered."""
+    workers = managed_workers(manager)
+    by_worker = defaultdict(list)
+    for e in _entry_qs().filter(date=day, worker__in=workers).order_by("operation__product__name", "operation__name"):
+        by_worker[e.worker_id].append(e)
+    rows = []
+    for w in sorted(workers, key=lambda w: ((w.team.name if w.team else ""), w.full_name)):
+        entries = by_worker[w.pk]
+        rows.append(
+            RosterRow(
+                worker=w,
+                entries=entries,
+                operations=open_operations(w, day),
+                approved=sum(e.quantity for e in entries if e.status == WorkEntry.Status.APPROVED),
+                pending=sum(e.quantity for e in entries if e.status == WorkEntry.Status.PENDING),
+            )
+        )
+    return rows
 
 
 def workers_without_entries(day):

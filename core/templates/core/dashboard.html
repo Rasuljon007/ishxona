@@ -1,0 +1,152 @@
+{% extends "core/base.html" %}
+{% block title %}{% for t in teams %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% endfor %} · Ishxona{% endblock %}
+{% block body %}
+<header>
+  <div>
+    <b>{% for t in teams %}{{ t.name }}{% if not forloop.last %}, {% endif %}{% empty %}Guruh biriktirilmagan{% endfor %}</b><br>
+    <span class="muted">{{ manager.full_name }} · {{ manager.get_role_display }}</span>
+  </div>
+  <div class="row">
+    <a class="btn" href="{% url 'orders' %}">Zakazlar</a>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Chiqish</button></form>
+  </div>
+</header>
+<main>
+  {% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}
+
+  <section id="ishchilar">
+    <h2>Ishchilarim <span class="badge">{{ roster|length }}</span>
+      <span class="muted" style="font-weight:400;font-size:14px">bugun, {{ day|date:"d.m.Y" }}</span></h2>
+    {% if not day_open %}<p class="muted">Kun yopilgan: bugungi ishni endi kiritib bo'lmaydi.</p>{% endif %}
+    {% if roster %}
+    <div class="scroll"><table>
+      <tr><th>Ishchi</th><th>Bugungi ishlari</th><th class="num">Tasdiqlangan</th><th class="num">Kutilmoqda</th></tr>
+      {% for r in roster %}
+      <tr>
+        <td>
+          <b>{{ r.worker.full_name }}</b><br>
+          <span class="muted">{{ r.worker.worker_type|default:"ishchi turi belgilanmagan" }}{% if teams|length > 1 and r.worker.team %} · {{ r.worker.team }}{% endif %}</span>
+        </td>
+        <td>
+          {% for e in r.entries %}
+          <div><span class="status-{{ e.status }}">●</span> {{ e.operation.product }} / {{ e.operation.name }}: {{ e.quantity }} dona</div>
+          {% empty %}
+          <span class="muted">Hali kiritilmagan</span>
+          {% endfor %}
+          {% if day_open %}
+            {% if r.operations %}
+            <details>
+              <summary>Ish kiritish</summary>
+              <form method="post" action="{% url 'enter' %}" class="row">{% csrf_token %}
+                <input type="hidden" name="worker" value="{{ r.worker.pk }}">
+                <select name="operation" required>
+                  <option value="">Mahsulot / qism</option>
+                  {% regroup r.operations by product as groups %}
+                  {% for g in groups %}
+                  <optgroup label="{{ g.grouper }}">
+                    {% for op in g.list %}<option value="{{ op.pk }}">{{ op.name }}</option>{% endfor %}
+                  </optgroup>
+                  {% endfor %}
+                </select>
+                <input name="quantity" type="number" min="1" required placeholder="Soni" style="width:90px">
+                <button class="primary" type="submit">Kiritish</button>
+              </form>
+            </details>
+            {% elif r.worker.worker_type_id %}
+            <div class="muted">Bugun barcha qismlar kiritilgan.</div>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="num">{{ r.approved }}</td>
+        <td class="num">{{ r.pending }}</td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    {% if missing %}
+    <p style="margin-bottom:0"><span class="muted">Hali ish kiritmaganlar ({{ missing|length }}):</span>
+      {% for w in missing %}{{ w }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+    {% else %}
+    <p class="muted" style="margin:0">Guruhingizda faol ishchi yo'q. Ishchilarni boshliq boshqaruv panelida guruhga biriktiradi.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Tasdiqlash kutilmoqda <span class="badge">{{ pending|length }}</span>
+      {% if pending %}
+      <form method="post" action="{% url 'approve_all' %}" style="margin-left:auto">{% csrf_token %}
+        <button class="ok" type="submit">Hammasini tasdiqlash</button>
+      </form>
+      {% endif %}
+    </h2>
+    {% if pending %}
+    <div class="scroll"><table>
+      <tr><th>Sana</th><th>Ishchi</th><th>Ish</th><th class="num">Soni</th><th class="num">Brak</th><th>Kiritdi</th><th></th></tr>
+      {% for e in pending %}
+      <tr>
+        <td>{{ e.date|date:"d.m" }}</td>
+        <td>{{ e.worker }}</td>
+        <td>{{ e.operation.product }} / {{ e.operation.name }}</td>
+        <td class="num">{{ e.quantity }}</td>
+        <td class="num">{{ e.defect_quantity }}</td>
+        <td class="muted">{% if e.entered_by_id == e.worker_id %}o'zi{% else %}{{ e.entered_by }}{% endif %}</td>
+        <td>
+          <div class="row">
+            <form method="post" action="{% url 'approve' %}">{% csrf_token %}
+              <input type="hidden" name="entry" value="{{ e.pk }}">
+              <button class="ok" type="submit">Tasdiqlash</button>
+            </form>
+            <details>
+              <summary>Rad etish</summary>
+              <form method="post" action="{% url 'reject' %}" class="row">{% csrf_token %}
+                <input type="hidden" name="entry" value="{{ e.pk }}">
+                <input name="reason" placeholder="Sababi" required minlength="3">
+                <button class="bad" type="submit">Rad etish</button>
+              </form>
+            </details>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    {% else %}
+    <p class="muted" style="margin:0">Hozircha kutilayotgan yozuv yo'q.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Oxirgi 7 kun</h2>
+    {% if not day_open %}<p class="muted">Kun yopilgan: tasdiqlangan yozuvlarni faqat shu kuni soat yopilguncha tahrirlash mumkin.</p>{% endif %}
+    <div class="scroll"><table>
+      <tr><th>Sana</th><th>Ishchi</th><th>Ish</th><th class="num">Soni</th><th class="num">Brak</th><th>Holat</th></tr>
+      {% for e in recent %}
+      <tr>
+        <td>{{ e.date|date:"d.m" }}</td>
+        <td>{{ e.worker }}</td>
+        <td>{{ e.operation.product }} / {{ e.operation.name }}</td>
+        <td class="num">{{ e.quantity }}</td>
+        <td class="num">{{ e.defect_quantity }}</td>
+        <td>
+          <span class="status-{{ e.status }}">{{ e.get_status_display }}</span>
+          {% if e.status == "rejected" %}<br><span class="muted">{{ e.reject_reason }}</span>{% endif %}
+          {% if e.pk in editable %}
+          <details>
+            <summary>Tahrirlash</summary>
+            <form method="post" action="{% url 'edit' %}" class="row">{% csrf_token %}
+              <input type="hidden" name="entry" value="{{ e.pk }}">
+              <select name="field">{% for value, label in fields %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
+              <input name="value" type="number" min="0" required placeholder="Yangi qiymat" style="width:110px">
+              <input name="comment" required minlength="3" placeholder="Izoh (majburiy)">
+              <button type="submit">Saqlash</button>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="muted">Yozuvlar yo'q.</td></tr>
+      {% endfor %}
+    </table></div>
+  </section>
+</main>
+{% endblock %}

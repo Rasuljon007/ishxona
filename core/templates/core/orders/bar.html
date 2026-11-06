@@ -1,0 +1,4 @@
+<div style="min-width:160px">
+  <div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span><b>{{ p.done }}</b> / {{ p.order.quantity }}</span><span>{{ p.percent }}%</span></div>
+  <div style="height:7px;border-radius:99px;background:rgba(127,127,127,.18);overflow:hidden;margin-top:3px"><span style="display:block;height:100%;width:{{ p.percent }}%;border-radius:99px;background:{% if p.deadline_state == 'late' %}#dc2626{% elif p.deadline_state == 'soon' %}#d97706{% else %}#16a34a{% endif %}"></span></div>
+</div>

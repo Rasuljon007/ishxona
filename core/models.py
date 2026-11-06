@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.db.models import Sum
 
@@ -46,6 +47,14 @@ class Employee(models.Model):
     )
     is_active = models.BooleanField(
         "faol", default=True, help_text="Bot orqali o'zi ro'yxatdan o'tganlar boshliq faollashtirguncha nofaol turadi"
+    )
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        verbose_name="sayt hisobi",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="employee",
     )
     created_at = models.DateTimeField("qo'shilgan", auto_now_add=True)
 
@@ -162,6 +171,48 @@ class PriceHistory(models.Model):
         ordering = ["-changed_at"]
 
 
+class Order(models.Model):
+    """A batch the workshop has to sew, e.g. 3000 trousers for a client."""
+
+    class Status(models.TextChoices):
+        NEW = "new", "Yangi"
+        IN_PROGRESS = "in_progress", "Jarayonda"
+        DONE = "done", "Tayyor"
+        DELIVERED = "delivered", "Topshirilgan"
+        CANCELLED = "cancelled", "Bekor qilingan"
+
+    # Entries are linked automatically only to these; the boss closes the rest by hand.
+    OPEN_STATUSES = (Status.NEW, Status.IN_PROGRESS)
+    # Shown in red this many days before the deadline when the order is not finished.
+    WARN_DAYS = 3
+
+    product = models.ForeignKey(
+        Product, verbose_name="mahsulot", on_delete=models.PROTECT, related_name="orders"
+    )
+    quantity = models.PositiveIntegerField("soni (dona)")
+    client = models.CharField("mijoz", max_length=150, blank=True)
+    start_date = models.DateField("boshlangan sana", null=True, blank=True)
+    deadline = models.DateField("topshirish muddati", null=True, blank=True)
+    status = models.CharField("holat", max_length=12, choices=Status.choices, default=Status.NEW)
+    note = models.TextField("izoh", blank=True)
+    created_at = models.DateTimeField("qo'shilgan", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "zakaz"
+        verbose_name_plural = "zakazlar"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        name = f"{self.quantity} {self.product.name}"
+        if self.client:
+            name += f" ({self.client})"
+        return f"Zakaz #{self.pk}: {name}" if self.pk else name
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN_STATUSES
+
+
 class WorkEntry(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Kutilmoqda"
@@ -174,6 +225,15 @@ class WorkEntry(models.Model):
     )
     operation = models.ForeignKey(
         Operation, verbose_name="qism", on_delete=models.PROTECT, related_name="entries"
+    )
+    order = models.ForeignKey(
+        Order,
+        verbose_name="zakaz",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="entries",
+        help_text="Yozuv kiritilganda shu mahsulotning ochiq zakaziga o'zi bog'lanadi",
     )
     quantity = models.PositiveIntegerField("soni")
     defect_quantity = models.PositiveIntegerField("brak", default=0)

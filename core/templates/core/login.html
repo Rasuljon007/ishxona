@@ -1,0 +1,18 @@
+{% extends "core/base.html" %}
+{% block title %}Kirish · Ishxona{% endblock %}
+{% block body %}
+<main style="max-width:380px; padding-top:60px">
+  <section>
+    <h2>Ishxona: sardorlar uchun kirish</h2>
+    {% if form.errors %}<div class="msg error">Telefon raqami yoki parol noto'g'ri.</div>{% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <p><label>Telefon raqami<br><input name="username" placeholder="998901234567" autofocus required style="width:100%"></label></p>
+      <p><label>Parol<br><input type="password" name="password" required style="width:100%"></label></p>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="primary" type="submit" style="width:100%">Kirish</button>
+    </form>
+    <p class="muted" style="margin-bottom:0">Parolni boshliqdan oling. Boshliq <a href="{% url 'admin:index' %}">boshqaruv paneli</a> orqali kiradi.</p>
+  </section>
+</main>
+{% endblock %}

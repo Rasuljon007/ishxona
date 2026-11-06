@@ -1,10 +1,14 @@
+import io
 import datetime as dt
+import os
+from unittest import mock
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core import reports, services
-from core.models import Employee, EntryEdit, Operation, PriceHistory, Product, Team, WorkEntry, WorkerType
+from core import orders
+from core.models import Employee, EntryEdit, Operation, Order, PriceHistory, Product, Team, WorkEntry, WorkerType
 from core.services import ServiceError
 from core.translit import to_cyrillic
 
@@ -219,3 +223,376 @@ class TranslitTests(TestCase):
 
     def test_keeps_tags_and_numbers(self):
         self.assertEqual(to_cyrillic("<b>Soni</b>: 120"), "<b>Сони</b>: 120")
+
+
+class SeedDemoTests(TestCase):
+    def test_creates_two_months_and_resets(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        call_command("seed_demo", days=10, stdout=open(os.devnull, "w"))
+        self.assertTrue(WorkEntry.objects.filter(status=WorkEntry.Status.APPROVED).exists())
+        self.assertFalse(Employee.objects.filter(telegram_id__isnull=False).exists())
+        self.assertFalse(Team.objects.filter(telegram_chat_id__isnull=False).exists())
+        self.assertEqual(PriceHistory.objects.count(), 0)
+        start = services.today() - dt.timedelta(days=9)
+        self.assertTrue(reports.summary_pdf(start, services.today()).startswith(b"%PDF"))
+        with self.assertRaises(CommandError):
+            call_command("seed_demo", days=10)
+        call_command("seed_demo", days=61, reset=True, stdout=open(os.devnull, "w"))
+        self.assertEqual(PriceHistory.objects.count(), 2)
+        self.assertEqual(Employee.objects.filter(role=Employee.Role.BOSS).count(), 1)
+
+
+class DemoRoleTests(TestCase):
+    def test_moves_telegram_between_roles(self):
+        from django.core.management import call_command
+
+        out = open(os.devnull, "w")
+        call_command("seed_demo", days=3, stdout=out)
+        services.register_by_contact(555, "+998 90 111 22 33", "Men")
+        call_command("demo_rol", "sardor", stdout=out)
+        self.assertEqual(services.get_by_telegram(555).role, Employee.Role.MANAGER)
+        call_command("demo_rol", "ishchi", stdout=out)
+        self.assertEqual(services.get_by_telegram(555).role, Employee.Role.WORKER)
+        call_command("demo_rol", "boshliq", stdout=out)
+        self.assertEqual(Employee.objects.filter(telegram_id=555).count(), 1)
+        self.assertTrue(services.get_by_telegram(555).is_boss)
+
+
+@override_settings(BOT_TOKEN="")
+class ManagerSiteTests(TestCase):
+    def setUp(self):
+        sewer = WorkerType.objects.create(name="Tikuvchi")
+        product = Product.objects.create(name="Futbolka")
+        self.op = Operation.objects.create(product=product, worker_type=sewer, name="Yoqa", price=500)
+        self.manager = Employee.objects.create(full_name="Sardor", phone="998900000001", role=Employee.Role.MANAGER)
+        other = Employee.objects.create(full_name="Boshqa", phone="998900000002", role=Employee.Role.MANAGER)
+        team = Team.objects.create(name="T1", manager=self.manager)
+        team2 = Team.objects.create(name="T2", manager=other)
+        self.mine = Employee.objects.create(full_name="Mening ishchim", phone="998900000003", worker_type=sewer, team=team)
+        self.theirs = Employee.objects.create(full_name="Begona ishchi", phone="998900000004", worker_type=sewer, team=team2)
+        day = services.today()
+        self.e1 = WorkEntry.objects.create(date=day, worker=self.mine, operation=self.op, quantity=10, unit_price=500, entered_by=self.mine)
+        self.e2 = WorkEntry.objects.create(date=day, worker=self.theirs, operation=self.op, quantity=20, unit_price=500, entered_by=self.theirs)
+        services.set_site_password(self.manager, "parol123")
+        self.client.login(username="998900000001", password="parol123")
+
+    def test_sees_only_own_team(self):
+        page = self.client.get("/sardor/").content.decode()
+        self.assertIn("Mening ishchim", page)
+        self.assertNotIn("Begona ishchi", page)
+
+    def test_approve_and_reject(self):
+        self.client.post("/sardor/tasdiqlash/", {"entry": self.e1.pk})
+        self.e1.refresh_from_db()
+        self.assertEqual(self.e1.status, WorkEntry.Status.APPROVED)
+        self.assertEqual(self.e1.approved_by, self.manager)
+        self.client.post("/sardor/rad-etish/", {"entry": self.e2.pk, "reason": "Noto'g'ri"})
+        self.e2.refresh_from_db()
+        self.assertEqual(self.e2.status, WorkEntry.Status.PENDING)
+
+    def test_reject_needs_reason(self):
+        self.client.post("/sardor/rad-etish/", {"entry": self.e1.pk, "reason": ""})
+        self.e1.refresh_from_db()
+        self.assertEqual(self.e1.status, WorkEntry.Status.PENDING)
+        self.client.post("/sardor/rad-etish/", {"entry": self.e1.pk, "reason": "Ikki marta kiritilgan"})
+        self.e1.refresh_from_db()
+        self.assertEqual(self.e1.status, WorkEntry.Status.REJECTED)
+
+    def test_approve_all_only_own(self):
+        self.client.post("/sardor/hammasini-tasdiqlash/")
+        self.e1.refresh_from_db()
+        self.e2.refresh_from_db()
+        self.assertEqual(self.e1.status, WorkEntry.Status.APPROVED)
+        self.assertEqual(self.e2.status, WorkEntry.Status.PENDING)
+
+    def test_manager_cannot_open_admin_and_worker_cannot_log_in(self):
+        self.assertNotEqual(self.client.get("/admin/").status_code, 200)
+        self.client.logout()
+        self.assertRedirects(self.client.get("/sardor/"), "/sardor/kirish/", fetch_redirect_response=False)
+        with self.assertRaises(ServiceError):
+            services.set_site_password(self.mine, "parol123")
+
+
+@override_settings(BOT_TOKEN="")
+class ManagerEnterSiteTests(TestCase):
+    def setUp(self):
+        sewer = WorkerType.objects.create(name="Tikuvchi")
+        ironer = WorkerType.objects.create(name="Dazmolchi")
+        product = Product.objects.create(name="Futbolka")
+        self.op = Operation.objects.create(product=product, worker_type=sewer, name="Yoqa", price=500)
+        self.op2 = Operation.objects.create(product=product, worker_type=sewer, name="Yeng", price=400)
+        self.iron = Operation.objects.create(product=product, worker_type=ironer, name="Dazmol", price=200)
+        self.manager = Employee.objects.create(full_name="Sardor", phone="998900000011", role=Employee.Role.MANAGER)
+        other = Employee.objects.create(full_name="Boshqa", phone="998900000012", role=Employee.Role.MANAGER)
+        team = Team.objects.create(name="T1", manager=self.manager)
+        team2 = Team.objects.create(name="T2", manager=other)
+        self.mine = Employee.objects.create(full_name="Mening ishchim", phone="998900000013", worker_type=sewer, team=team)
+        self.idle = Employee.objects.create(full_name="Hali kiritmagan", phone="998900000015", worker_type=sewer, team=team)
+        self.theirs = Employee.objects.create(full_name="Begona ishchi", phone="998900000014", worker_type=sewer, team=team2)
+        services.set_site_password(self.manager, "parol123")
+        self.client.login(username="998900000011", password="parol123")
+        noon = timezone.localtime().replace(hour=12, minute=0)
+        patcher = mock.patch("core.services.local_now", return_value=noon)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.day = noon.date()
+
+    def test_roster_lists_own_workers_with_their_operations(self):
+        page = self.client.get("/sardor/").content.decode()
+        self.assertIn("Ishchilarim", page)
+        self.assertIn("Mening ishchim", page)
+        self.assertIn("Hali kiritmagan", page)
+        self.assertNotIn("Begona ishchi", page)
+        self.assertIn(f'<option value="{self.op.pk}">Yoqa', page)
+        self.assertNotIn(">Dazmol<", page)
+
+    def test_enter_creates_approved_entry_and_hides_operation(self):
+        self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.op.pk, "quantity": 25})
+        entry = WorkEntry.objects.get(worker=self.mine, operation=self.op, date=self.day)
+        self.assertEqual(entry.status, WorkEntry.Status.APPROVED)
+        self.assertEqual(entry.entered_by, self.manager)
+        self.assertEqual(entry.quantity, 25)
+        rows = {r.worker.pk: r for r in services.team_roster(self.manager, self.day)}
+        self.assertEqual(rows[self.mine.pk].approved, 25)
+        self.assertEqual([o.pk for o in rows[self.mine.pk].operations], [self.op2.pk])
+
+    def test_enter_twice_is_refused(self):
+        data = {"worker": self.mine.pk, "operation": self.op.pk, "quantity": 5}
+        self.client.post("/sardor/kiritish/", data)
+        response = self.client.post("/sardor/kiritish/", dict(data, quantity=7), follow=True)
+        self.assertContains(response, "allaqachon")
+        self.assertEqual(WorkEntry.objects.filter(worker=self.mine).count(), 1)
+
+    def test_cannot_enter_for_other_team_or_wrong_type(self):
+        self.client.post("/sardor/kiritish/", {"worker": self.theirs.pk, "operation": self.op.pk, "quantity": 5})
+        self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.iron.pk, "quantity": 5})
+        self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.op.pk, "quantity": "abc"})
+        self.assertFalse(WorkEntry.objects.exists())
+
+    def test_enter_refused_after_day_closes(self):
+        late = timezone.localtime().replace(hour=22, minute=0)
+        with mock.patch("core.services.local_now", return_value=late):
+            self.client.post("/sardor/kiritish/", {"worker": self.mine.pk, "operation": self.op.pk, "quantity": 5})
+        self.assertFalse(WorkEntry.objects.exists())
+
+
+@override_settings(BOT_TOKEN="")
+class ReviewFixTests(TestCase):
+    def test_site_edit_notifies_worker(self):
+        sewer = WorkerType.objects.create(name="Tikuvchi")
+        op = Operation.objects.create(product=Product.objects.create(name="F"), worker_type=sewer, name="Yoqa", price=500)
+        manager = Employee.objects.create(full_name="Sardor", phone="998900000021", role=Employee.Role.MANAGER)
+        team = Team.objects.create(name="T", manager=manager)
+        worker = Employee.objects.create(full_name="Ishchi", phone="998900000022", worker_type=sewer, team=team, telegram_id=77)
+        noon = timezone.localtime().replace(hour=12, minute=0)
+        services.set_site_password(manager, "parol123")
+        self.client.login(username="998900000021", password="parol123")
+        with mock.patch("core.services.local_now", return_value=noon), mock.patch("core.telegram.send_message") as send:
+            entry = services.manager_enter(manager, worker, op, 10)
+            self.client.post("/sardor/tahrirlash/", {"entry": entry.pk, "field": "quantity", "value": 8, "comment": "Qayta sanaldi"})
+        entry.refresh_from_db()
+        self.assertEqual(entry.quantity, 8)
+        send.assert_called_once()
+        self.assertEqual(send.call_args[0][0], 77)
+        self.assertIn("10 → 8", send.call_args[0][1])
+
+    def test_phone_change_updates_site_login(self):
+        manager = Employee.objects.create(full_name="Sardor", phone="998900000031", role=Employee.Role.MANAGER)
+        services.set_site_password(manager, "parol123")
+        manager.phone = "998900000039"
+        manager.save()
+        services.sync_site_username(manager)
+        self.assertTrue(self.client.login(username="998900000039", password="parol123"))
+
+    def test_seed_reset_keeps_team_with_real_members(self):
+        from django.core.management import call_command
+        out = io.StringIO()
+        call_command("seed_demo", "--days", "3", stdout=out)
+        team = Team.objects.first()
+        real = Employee.objects.create(full_name="Haqiqiy", phone="998901112233", team=team)
+        call_command("seed_demo", "--days", "3", "--reset", stdout=out)
+        real.refresh_from_db()
+        self.assertEqual(real.team_id, team.pk)
+
+
+@override_settings(STORAGES={
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+})
+class AdminMenuTests(TestCase):
+    def test_auth_section_hidden_but_login_works(self):
+        from django.contrib.auth import get_user_model
+        get_user_model().objects.create_superuser("boshliq", "", "parol123")
+        self.assertTrue(self.client.login(username="boshliq", password="parol123"))
+        page = self.client.get("/admin/").content.decode()
+        self.assertIn("Xodimlar", page)
+        self.assertNotIn("/admin/auth/", page)
+
+    def test_dashboard_and_lists_render(self):
+        from django.contrib.auth import get_user_model
+        get_user_model().objects.create_superuser("boshliq", "", "parol123")
+        self.client.login(username="boshliq", password="parol123")
+        call_command_quiet("seed_demo")
+        page = self.client.get("/admin/").content.decode()
+        self.assertIn("Bugun tasdiqlangan", page)
+        self.assertIn("Guruhlar: bugun", page)
+        for url in ["/admin/core/workentry/", "/admin/core/employee/", "/admin/core/product/1/change/"]:
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        self.client.logout()
+        self.assertIn("Kirish", self.client.get("/admin/login/").content.decode())
+
+
+@override_settings(DAY_CLOSE_HOUR=21, MAX_QUANTITY=5000, BOT_TOKEN="")
+class OrderTests(TestCase):
+    def setUp(self):
+        sewer = WorkerType.objects.create(name="Tikuvchi")
+        self.boss = Employee.objects.create(full_name="Boshliq", phone="901111111", role=Employee.Role.BOSS)
+        self.manager = Employee.objects.create(full_name="Sardor", phone="902222222", role=Employee.Role.MANAGER)
+        team = Team.objects.create(name="T1", manager=self.manager)
+        self.ali = Employee.objects.create(full_name="Ali", phone="903333333", worker_type=sewer, team=team)
+        self.vali = Employee.objects.create(full_name="Vali", phone="904444444", worker_type=sewer, team=team)
+        self.pants = Product.objects.create(name="Shim")
+        self.belt = Operation.objects.create(product=self.pants, worker_type=sewer, name="Kamar", price=300)
+        self.pocket = Operation.objects.create(product=self.pants, worker_type=sewer, name="Cho'ntak", price=200)
+
+    def test_entry_without_order_still_works(self):
+        entry = services.submit_entry(self.ali, self.belt, 10, now=at(10))
+        self.assertIsNone(entry.order)
+
+    def test_entry_goes_to_open_order_and_status_follows(self):
+        order = Order.objects.create(product=self.pants, quantity=100)
+        entry = services.submit_entry(self.ali, self.belt, 60, now=at(10))
+        self.assertEqual(entry.order, order)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.IN_PROGRESS)
+        # Pending work is shown but does not count as done.
+        p = orders.progress(order)
+        self.assertEqual(p.parts[0].pending, 60)
+        self.assertEqual(p.done, 0)
+
+        services.approve(self.manager, entry, now=at(11))
+        services.manager_enter(self.manager, self.vali, self.belt, 40, now=at(11))
+        services.manager_enter(self.manager, self.ali, self.pocket, 100, now=at(12))
+        p = orders.progress(order)
+        self.assertEqual([part.done for part in p.parts], [100, 100])
+        self.assertEqual(p.done, 100)
+        self.assertEqual(p.percent, 100)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.DONE)
+        ali = next(r for r in p.workers if r.worker == self.ali)
+        self.assertEqual(ali.cells, [60, 100])
+
+    def test_order_done_by_slowest_part_and_defects_subtracted(self):
+        order = Order.objects.create(product=self.pants, quantity=100)
+        entry = services.manager_enter(self.manager, self.ali, self.belt, 100, now=at(10))
+        services.manager_enter(self.manager, self.vali, self.pocket, 30, now=at(10))
+        services.edit_entry(self.manager, entry, EntryEdit.Field.DEFECT, 10, "brak chiqdi", now=at(11))
+        p = orders.progress(order)
+        self.assertEqual([part.done for part in p.parts], [90, 30])
+        self.assertEqual(p.parts[0].defect, 10)
+        self.assertEqual(p.done, 30)
+        self.assertEqual(p.left, 70)
+
+    def test_most_urgent_order_first_then_next_when_full(self):
+        later = Order.objects.create(product=self.pants, quantity=50, deadline=dt.date(2026, 12, 30))
+        urgent = Order.objects.create(product=self.pants, quantity=50, deadline=dt.date(2026, 11, 20))
+        first = services.manager_enter(self.manager, self.ali, self.belt, 50, now=at(10))
+        self.assertEqual(first.order, urgent)
+        second = services.manager_enter(self.manager, self.vali, self.belt, 10, now=at(10))
+        self.assertEqual(second.order, later)
+        # Another part of the urgent order is still needed.
+        third = services.manager_enter(self.manager, self.vali, self.pocket, 10, now=at(10))
+        self.assertEqual(third.order, urgent)
+
+    def test_delivered_and_cancelled_orders_are_left_alone(self):
+        order = Order.objects.create(product=self.pants, quantity=10, status=Order.Status.DELIVERED)
+        entry = services.manager_enter(self.manager, self.ali, self.belt, 10, now=at(10))
+        self.assertIsNone(entry.order)
+        entry.order = order
+        entry.save()
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.DELIVERED)
+
+    def test_rejecting_reopens_done_order(self):
+        order = Order.objects.create(product=self.pants, quantity=10)
+        services.manager_enter(self.manager, self.ali, self.belt, 10, now=at(10))
+        pocket = services.submit_entry(self.ali, self.pocket, 10, now=at(10))
+        services.approve(self.manager, pocket, now=at(11))
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.DONE)
+        services.edit_entry(self.manager, pocket, EntryEdit.Field.QUANTITY, 5, "xato", now=at(12))
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.IN_PROGRESS)
+
+    def test_deadline_warning(self):
+        day = services.today()
+        soon = Order.objects.create(product=self.pants, quantity=10, deadline=day + dt.timedelta(days=2))
+        late = Order.objects.create(product=self.pants, quantity=10, deadline=day - dt.timedelta(days=1))
+        far = Order.objects.create(product=self.pants, quantity=10, deadline=day + dt.timedelta(days=30))
+        self.assertEqual(orders.progress(soon).deadline_state, "soon")
+        self.assertEqual(orders.progress(late).deadline_state, "late")
+        self.assertEqual(orders.progress(far).deadline_state, "")
+
+    def test_pages_render(self):
+        order = Order.objects.create(product=self.pants, quantity=100, client="Do'kon")
+        services.manager_enter(self.manager, self.ali, self.belt, 20, now=at(10))
+        services.set_site_password(self.manager, "parol123")
+        self.client.login(username=self.manager.phone, password="parol123")
+        page = self.client.get("/sardor/zakazlar/").content.decode()
+        self.assertIn("100 Shim", page)
+        page = self.client.get(f"/sardor/zakazlar/{order.pk}/").content.decode()
+        self.assertIn("Kamar", page)
+        self.assertIn("Ali", page)
+        self.assertIn("Zakazlar", self.client.get("/sardor/").content.decode())
+
+    def test_manager_sees_only_own_workers_in_order(self):
+        order = Order.objects.create(product=self.pants, quantity=100)
+        other = Employee.objects.create(full_name="Boshqa sardor", phone="905555555", role=Employee.Role.MANAGER)
+        team2 = Team.objects.create(name="T2", manager=other)
+        stranger = Employee.objects.create(
+            full_name="Begona ishchi", phone="906666666", worker_type=self.ali.worker_type, team=team2
+        )
+        services.manager_enter(self.manager, self.ali, self.belt, 20, now=at(10))
+        services.manager_enter(other, stranger, self.belt, 30, now=at(10))
+        services.set_site_password(self.manager, "parol123")
+        self.client.login(username=self.manager.phone, password="parol123")
+        page = self.client.get(f"/sardor/zakazlar/{order.pk}/").content.decode()
+        self.assertIn("Ali", page)
+        self.assertNotIn("Begona ishchi", page)
+        # The order total still counts the whole workshop.
+        self.assertIn("50 / 100", page)
+        self.assertEqual(len(orders.progress(order, self.boss).workers), 2)
+
+
+@override_settings(STORAGES={
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+})
+class AdminOrderTests(TestCase):
+    def test_order_admin_pages(self):
+        from django.contrib.auth import get_user_model
+        get_user_model().objects.create_superuser("boshliq", "", "parol123")
+        self.client.login(username="boshliq", password="parol123")
+        call_command_quiet("seed_demo")
+        product = Product.objects.first()
+        order = Order.objects.create(product=product, quantity=3000, client="Mijoz")
+        entry = WorkEntry.objects.filter(operation__product=product).first()
+        entry.order = order
+        entry.save()
+        for url in [
+            "/admin/core/order/",
+            "/admin/core/order/add/",
+            f"/admin/core/order/{order.pk}/change/",
+            f"/admin/core/workentry/{entry.pk}/change/",
+        ]:
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        page = self.client.get(f"/admin/core/order/{order.pk}/change/").content.decode()
+        self.assertIn("dona tayyor", page)
+        self.assertIn("Zakazlar", self.client.get("/admin/").content.decode())
+
+
+def call_command_quiet(name, *args):
+    from django.core.management import call_command
+    call_command(name, *args, stdout=io.StringIO())

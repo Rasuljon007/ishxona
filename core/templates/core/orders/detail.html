@@ -1,0 +1,15 @@
+{% extends "core/base.html" %}
+{% block title %}Zakaz #{{ p.order.pk }} · Ishxona{% endblock %}
+{% block body %}
+<header>
+  <div><b>Zakaz #{{ p.order.pk }} · {{ p.order.quantity }} {{ p.order.product.name }}</b><br>
+    <span class="muted">{{ p.order.client|default:"Mijoz ko'rsatilmagan" }} · {{ p.order.get_status_display }}{% if p.order.start_date %} · boshlangan {{ p.order.start_date|date:"d.m.Y" }}{% endif %}</span></div>
+  <div class="row"><a class="btn" href="{% url 'orders' %}">← Zakazlar</a></div>
+</header>
+<main>
+  <section>
+    {% include "core/orders/progress.html" %}
+    {% if p.order.note %}<p class="muted" style="margin-top:14px">{{ p.order.note|linebreaksbr }}</p>{% endif %}
+  </section>
+</main>
+{% endblock %}
