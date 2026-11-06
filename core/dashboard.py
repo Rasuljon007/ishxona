@@ -7,7 +7,7 @@ from django.db.models import Count, Q, Sum
 from django.urls import reverse
 
 from core import services
-from core.models import Employee, Product, Team, WorkEntry
+from core.models import Employee, Order, Product, Team, WorkEntry
 from core.reports import money
 
 CHART_DAYS = 14
@@ -18,6 +18,11 @@ def pending_badge(request):
     count = WorkEntry.objects.filter(status=WorkEntry.Status.PENDING).count()
     # An empty string hides the badge; None was shown as the word "NONE".
     return count or ""
+
+
+def open_orders_badge(request):
+    """Shown next to "Zakazlar": orders still being sewn."""
+    return Order.objects.filter(status__in=Order.OPEN_STATUSES).count() or ""
 
 
 def _fmt(number):
