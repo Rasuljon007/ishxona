@@ -1,17 +1,19 @@
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.models import Group, User
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import display
 from unfold.widgets import UnfoldAdminPasswordWidget
 
-from core import services
+from core import orders, services
 from core.models import (
     Employee,
     EntryEdit,
     Operation,
+    Order,
     PriceHistory,
     Product,
     Team,
@@ -175,12 +177,72 @@ class EntryEditInline(TabularInline):
         return False
 
 
+@admin.register(Order)
+class OrderAdmin(ModelAdmin):
+    list_display = ["title", "client", "progress_bar", "deadline_display", "status_label", "start_date"]
+    list_filter = ["status", "product"]
+    search_fields = ["client", "product__name", "note"]
+    autocomplete_fields = ["product"]
+    readonly_fields = ["progress_panel"]
+    fieldsets = [
+        (None, {"fields": ["product", "quantity", "client", "start_date", "deadline", "status", "note"]}),
+        ("Bajarilishi", {"fields": ["progress_panel"]}),
+    ]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("product")
+
+    def get_fieldsets(self, request, obj=None):
+        # A new order has no progress yet.
+        return self.fieldsets if obj else self.fieldsets[:1]
+
+    @admin.display(description="zakaz", ordering="pk")
+    def title(self, obj):
+        return f"#{obj.pk} · {obj.quantity} {obj.product.name}"
+
+    @admin.display(description="bajarilishi")
+    def progress_bar(self, obj):
+        return render_to_string("core/orders/bar.html", {"p": orders.progress(obj)})
+
+    @admin.display(description="muddat", ordering="deadline")
+    def deadline_display(self, obj):
+        if not obj.deadline:
+            return "-"
+        state = orders.progress(obj).deadline_state
+        colour = {"late": "#dc2626", "soon": "#d97706"}.get(state)
+        text = obj.deadline.strftime("%d.%m.%Y")
+        if colour:
+            return format_html('<b style="color:{}">{}</b>', colour, text)
+        return text
+
+    @display(
+        description="holat",
+        ordering="status",
+        label={
+            Order.Status.NEW.label: "info",
+            Order.Status.IN_PROGRESS.label: "warning",
+            Order.Status.DONE.label: "success",
+            Order.Status.DELIVERED.label: "success",
+            Order.Status.CANCELLED.label: "danger",
+        },
+    )
+    def status_label(self, obj):
+        return obj.get_status_display()
+
+    @admin.display(description="")
+    def progress_panel(self, obj):
+        if not obj.pk:
+            return "-"
+        return render_to_string("core/orders/progress.html", {"p": orders.progress(obj)})
+
+
 @admin.register(WorkEntry)
 class WorkEntryAdmin(ModelAdmin):
     list_display = [
         "date_short",
         "worker",
         "operation",
+        "order",
         "quantity",
         "defect_quantity",
         "unit_price",
@@ -189,7 +251,7 @@ class WorkEntryAdmin(ModelAdmin):
         "entered_by",
         "approved_by",
     ]
-    list_filter = ["status", "date", "worker__team", "operation__product"]
+    list_filter = ["status", "date", "worker__team", "operation__product", "order"]
     search_fields = ["worker__full_name", "operation__name"]
     date_hierarchy = "date"
     readonly_fields = [
@@ -206,6 +268,17 @@ class WorkEntryAdmin(ModelAdmin):
         "reject_reason",
     ]
     inlines = [EntryEditInline]
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # The boss may move an entry to another order of the same product.
+        if db_field.name == "order":
+            entry_id = request.resolver_match.kwargs.get("object_id") if request.resolver_match else None
+            entry = WorkEntry.objects.filter(pk=entry_id).select_related("operation").first()
+            if entry:
+                kwargs["queryset"] = Order.objects.filter(product_id=entry.operation.product_id).select_related(
+                    "product"
+                )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description="sana", ordering="date")
     def date_short(self, obj):

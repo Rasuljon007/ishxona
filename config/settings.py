@@ -145,6 +145,12 @@ UNFOLD = {
                 "separator": True,
                 "items": [
                     {
+                        "title": "Zakazlar",
+                        "icon": "assignment",
+                        "link": "/admin/core/order/",
+                        "badge": "core.dashboard.open_orders_badge",
+                    },
+                    {
                         "title": "Ish yozuvlari",
                         "icon": "fact_check",
                         "link": "/admin/core/workentry/",

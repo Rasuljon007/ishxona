@@ -4,11 +4,11 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import views as auth_views
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from core import services, telegram
-from core.models import Employee, EntryEdit, Operation
+from core import orders, services, telegram
+from core.models import Employee, EntryEdit, Operation, Order
 from core.services import ServiceError
 
 
@@ -153,3 +153,27 @@ def enter(request):
     entry = services.manager_enter(request.manager, worker, operation, quantity)
     telegram.tell_worker(entry, "entered_for_you", manager=request.manager.full_name)
     return f"Kiritildi: {entry.worker}, {entry.operation}, {entry.quantity} dona."
+
+
+@manager_required
+def order_list(request):
+    """All orders with their progress; open ones first. Read-only: the boss manages orders in the admin."""
+    show_closed = request.GET.get("hammasi") == "1"
+    qs = Order.objects.select_related("product")
+    if not show_closed:
+        qs = qs.filter(status__in=Order.OPEN_STATUSES + (Order.Status.DONE,))
+    items = [orders.progress(o) for o in qs]
+    items.sort(key=lambda p: (not p.order.is_open, p.order.deadline is None, p.order.deadline or services.today(), p.order.pk))
+    return render(
+        request,
+        "core/orders/list.html",
+        {"manager": request.manager, "items": items, "show_closed": show_closed},
+    )
+
+
+@manager_required
+def order_detail(request, pk):
+    order = get_object_or_404(Order.objects.select_related("product"), pk=pk)
+    return render(
+        request, "core/orders/detail.html", {"manager": request.manager, "p": orders.progress(order)}
+    )

@@ -14,6 +14,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from core import orders
 from core.models import Employee, EntryEdit, Operation, Product, Team, WorkEntry
 
 
@@ -249,12 +250,14 @@ def submit_entry(worker, operation, quantity, now=None):
         existing.approved_by = None
         existing.approved_at = None
         existing.reject_reason = ""
+        existing.order = orders.pick_order(operation)
         existing.save()
         return get_entry(existing.pk)
     entry = WorkEntry.objects.create(
         date=day,
         worker=worker,
         operation=operation,
+        order=orders.pick_order(operation),
         quantity=quantity,
         unit_price=operation.price,
         entered_by=worker,
@@ -284,6 +287,7 @@ def manager_enter(manager, worker, operation, quantity, now=None):
         date=day,
         worker=worker,
         operation=operation,
+        order=orders.pick_order(operation),
         quantity=quantity,
         unit_price=operation.price,
         status=WorkEntry.Status.APPROVED,
@@ -296,7 +300,7 @@ def manager_enter(manager, worker, operation, quantity, now=None):
 
 def _entry_qs():
     return WorkEntry.objects.select_related(
-        "worker", "worker__team", "operation", "operation__product", "entered_by", "approved_by"
+        "worker", "worker__team", "operation", "operation__product", "entered_by", "approved_by", "order"
     )
 
 

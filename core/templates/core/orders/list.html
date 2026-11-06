@@ -1,0 +1,32 @@
+{% extends "core/base.html" %}
+{% block title %}Zakazlar · Ishxona{% endblock %}
+{% block body %}
+<header>
+  <div><b>Zakazlar</b><br><span class="muted">{{ manager.full_name }} · {{ manager.get_role_display }}</span></div>
+  <div class="row"><a class="btn" href="{% url 'dashboard' %}">← Ishchilarim</a></div>
+</header>
+<main>
+  <section>
+    <h2>{% if show_closed %}Barcha zakazlar{% else %}Ochiq zakazlar{% endif %} <span class="badge">{{ items|length }}</span>
+      <a style="font-weight:400;font-size:14px;margin-left:auto" href="?{% if not show_closed %}hammasi=1{% endif %}">{% if show_closed %}Faqat ochiqlarini ko'rsatish{% else %}Topshirilgan va bekor qilinganlarni ham ko'rsatish{% endif %}</a></h2>
+    {% if items %}
+    <div class="scroll"><table>
+      <tr><th>Zakaz</th><th>Mijoz</th><th style="min-width:180px">Bajarilishi</th><th>Muddat</th><th>Holat</th></tr>
+      {% for p in items %}
+      <tr>
+        <td><a href="{% url 'order' p.order.pk %}"><b>#{{ p.order.pk }} · {{ p.order.quantity }} {{ p.order.product.name }}</b></a></td>
+        <td>{{ p.order.client|default:"-" }}</td>
+        <td>{% include "core/orders/bar.html" %}</td>
+        <td class="{% if p.deadline_state == 'late' %}status-rejected{% elif p.deadline_state == 'soon' %}status-pending{% endif %}">
+          {% if p.order.deadline %}{{ p.order.deadline|date:"d.m.Y" }}{% if p.deadline_state == "late" %}<br><b>o'tib ketgan</b>{% elif p.deadline_state == "soon" %}<br><b>{{ p.days_left }} kun qoldi</b>{% endif %}{% else %}-{% endif %}
+        </td>
+        <td>{{ p.order.get_status_display }}</td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    {% else %}
+    <p class="muted">Hozircha zakaz yo'q. Zakazlarni boshliq admin paneldan qo'shadi.</p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}
