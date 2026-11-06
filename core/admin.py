@@ -1,6 +1,8 @@
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.models import Group, User
+from django.urls import reverse
+from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
 from unfold.decorators import display
 from unfold.widgets import UnfoldAdminPasswordWidget
@@ -114,7 +116,7 @@ class OperationInline(TabularInline):
 
 @admin.register(Product)
 class ProductAdmin(ModelAdmin):
-    list_display = ["name", "price_display", "is_active"]
+    list_display = ["name", "operation_count", "price_display", "is_active", "edit_link"]
     list_filter = ["is_active"]
     search_fields = ["name"]
     inlines = [OperationInline]
@@ -124,10 +126,29 @@ class ProductAdmin(ModelAdmin):
     def price_display(self, obj):
         return money(obj.sewing_price) if obj.pk else "-"
 
+    @admin.display(description="qismlar soni")
+    def operation_count(self, obj):
+        return obj.operations.filter(is_active=True).count()
+
+    @admin.display(description="")
+    def edit_link(self, obj):
+        # The product name is a link but does not look like one, so the boss could not
+        # find how to change an existing product. This button makes it obvious.
+        return format_html(
+            '<a href="{}" style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;'
+            "border-radius:999px;font-weight:600;font-size:13px;white-space:nowrap;"
+            'background:var(--color-primary-600);color:#fff">'
+            '<span class="material-symbols-outlined" style="font-size:16px">edit</span>Tahrirlash</a>',
+            reverse("admin:core_product_change", args=[obj.pk]),
+        )
+
 
 @admin.register(Operation)
 class OperationAdmin(ModelAdmin):
     list_display = ["product", "name", "worker_type", "price", "is_active"]
+    list_display_links = ["product", "name"]
+    # Prices can be changed right in the list; each change still lands in Narx tarixi.
+    list_editable = ["price", "is_active"]
     list_filter = ["product", "worker_type", "is_active"]
     search_fields = ["name", "product__name"]
 

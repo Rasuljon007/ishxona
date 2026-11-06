@@ -16,7 +16,8 @@ CHART_DAYS = 14
 def pending_badge(request):
     """Shown next to "Ish yozuvlari" in the sidebar: entries still waiting for a manager."""
     count = WorkEntry.objects.filter(status=WorkEntry.Status.PENDING).count()
-    return count or None
+    # An empty string hides the badge; None was shown as the word "NONE".
+    return count or ""
 
 
 def _fmt(number):
